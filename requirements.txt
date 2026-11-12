@@ -1,0 +1,43 @@
+# ─── Core Framework ───
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-multipart
+
+# ─── Database ───
+sqlalchemy[asyncio]
+asyncpg
+alembic
+pgvector
+psycopg2-binary
+
+# ─── Authentication ───
+python-jose[cryptography]
+bcrypt
+
+# ─── Redis / Caching ───
+redis
+
+# ─── Background Tasks ───
+celery
+
+# ─── Resume Parsing ───
+pdfplumber
+python-docx
+
+# ─── Embeddings (local, free) ───
+sentence-transformers
+
+# ─── LLM (OpenRouter) ───
+httpx
+
+# ─── PDF Export ───
+reportlab
+
+# ─── Testing ───
+pytest
+pytest-asyncio
+
+# ─── Utilities ───
+python-dotenv

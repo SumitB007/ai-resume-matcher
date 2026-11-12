@@ -1,0 +1,41 @@
+# ─── Python ───
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ─── Virtual Environment ───
+venv/
+.venv/
+env/
+ENV/
+
+# ─── Environment Variables ───
+.env
+
+# ─── IDE ───
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ─── OS ───
+.DS_Store
+Thumbs.db
+
+# ─── Testing ───
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ─── Uploads ───
+uploads/
+
+# ─── Sentence Transformers Model Cache ───
+model_cache/
