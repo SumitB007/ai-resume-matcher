@@ -1,0 +1,103 @@
+# AI Resume & Job Matcher — full local stack
+#
+#   docker compose up --build
+#
+# Services: Postgres+pgvector (5432) · Redis (6379) · FastAPI (8000) ·
+#           Celery worker · Next.js frontend (3000)
+#
+# Why Compose (Phase 11, decisions.md §11.2): the original spec promised
+# "docker-compose up is the whole setup" but the file never existed — every
+# developer had to hand-run Postgres, Redis, the API and a worker. This file
+# restores that promise. Secrets come from the shell or a root .env file
+# (Compose reads .env automatically for ${...} interpolation); safe local
+# defaults are provided for everything except the OpenRouter key.
+
+services:
+  db:
+    # The pgvector team's image = official Postgres + the vector extension,
+    # so we don't have to compile pgvector ourselves.
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ats_matcher}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Creates the vector extension before Alembic migrations run (see file).
+      - ./docker/postgres/init-pgvector.sql:/docker-entrypoint-initdb.d/01-pgvector.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ats_matcher}"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    build: .
+    # Migrations run at API startup (idempotent) so a fresh clone needs no
+    # manual alembic step; the worker waits for the API service to start.
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    environment: &backend-env
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ats_matcher}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ats_matcher}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_DEFAULT_MODEL: ${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
+      DEBUG: ${DEBUG:-true}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    # --pool=solo: established in Phase 7 (decisions.md §7.3) — prefork workers
+    # crash with Sentence-Transformers/PyTorch on macOS; solo is also the
+    # simplest correct choice for a local dev stack.
+    command: celery -A app.tasks.celery_app worker --loglevel=info --pool=solo
+    environment: *backend-env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+    environment:
+      # Server-side calls (auth proxy / BFF routes) reach the API by its
+      # compose service name, not localhost.
+      API_INTERNAL_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
