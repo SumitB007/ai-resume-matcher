@@ -7,5 +7,6 @@ from app.models.user import User
 from app.models.resume import Resume
 from app.models.job import JobDescription
 from app.models.match import MatchResult
+from app.models.ats_check import AtsCheckResult
 
-__all__ = ["User", "Resume", "JobDescription", "MatchResult"]
+__all__ = ["User", "Resume", "JobDescription", "MatchResult", "AtsCheckResult"]

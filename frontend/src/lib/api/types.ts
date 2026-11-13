@@ -110,6 +110,26 @@ export interface DashboardData {
   }>;
 }
 
+export interface AtsCheckItem {
+  id: string;
+  group: "file_parse" | "contact" | "sections" | "content" | "skills" | "length_format";
+  label: string;
+  status: "pass" | "warn" | "fail";
+  detail: string;
+  weight: number;
+}
+
+export interface AtsCheckResult {
+  id: number | null;
+  resume_id: number | null;
+  score: number;
+  groups: Record<string, number>;
+  checks: AtsCheckItem[];
+  word_count: number;
+  skills_found: string[];
+  created_at: string | null;
+}
+
 /** The backend's standard error envelope (app/main.py exception handlers). */
 export interface ApiErrorBody {
   error: boolean;

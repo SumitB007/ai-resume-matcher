@@ -25,10 +25,9 @@ export function SiteHeader() {
           <Link href="/#how-it-works" className="hover:text-foreground">
             How it works
           </Link>
-          <span className="flex items-center gap-1.5">
+          <Link href="/resume-checker" className="hover:text-foreground">
             Resume checker
-            <Badge variant="secondary">Soon</Badge>
-          </span>
+          </Link>
           <span className="flex items-center gap-1.5">
             Templates
             <Badge variant="secondary">Soon</Badge>

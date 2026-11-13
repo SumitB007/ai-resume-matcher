@@ -17,6 +17,7 @@ This document details every major architectural, technical, library, and impleme
 9. [Phase 9: Nearest-Neighbor Recommendations & Analytics Engine](#9-phase-9-nearest-neighbor-recommendations--analytics-engine)
 10. [Phase 10: PDF Export & Global Resilience](#10-phase-10-pdf-export--global-resilience)
 11. [Phase 11: Frontend (Next.js) & Docker Stack](#11-phase-11-frontend-nextjs--docker-stack)
+12. [Phase 12: Standalone ATS Checker](#12-phase-12-standalone-ats-checker-roadmap-phase-2)
 
 ---
 
@@ -308,3 +309,38 @@ This document details every major architectural, technical, library, and impleme
   * **Client-side file checks mirror server rules** (PDF/DOCX only, 10 MB, JD ≥ 50 chars) so the common failures are instant, while the server remains the authority — its error envelope is what renders when the two disagree.
 
 > **Update (2026-11-13, Sumit's call): Docker usage is deferred.** The Compose stack stays in the repo but is dormant — local development runs natively (Postgres+pgvector and Redis as local services, `uvicorn` + Celery worker, `npm run dev` for the frontend) until most features are complete. Docker returns as the deployment setup in roadmap Phase 8. Nothing in the application code is Docker-specific: both paths are driven by the same environment variables (`DATABASE_URL`, `REDIS_URL`, `API_INTERNAL_URL`), so deferring Docker changes no code.
+
+---
+
+## 12. Phase 12: Standalone ATS Checker (Roadmap Phase 2)
+
+### 12.1 The Checker Is Rule-Based — No LLM, No Embeddings
+* **Decision:** `app/services/ats_service.py` implements the ATS checker as **22 deterministic rules** over the extracted resume text. No LLM call, no embedding, no Celery — the check runs synchronously in the request.
+* **Rationale:**
+  * **An ATS is itself a rule system.** Real applicant tracking systems parse, section, and keyword-scan; simulating that with transparent rules is more faithful than asking an LLM to vibe a score.
+  * **Determinism is a product feature:** the same resume must produce the same score every time (a unit test pins this), or users cannot trust improvements. LLM scores drift between runs and models.
+  * **Instant and free:** the check returns in milliseconds with zero API cost, which is what makes the anonymous public checker (§12.3) economically possible at all.
+  * **Explainability:** every point of the score traces to a named check with a written reason — the UI renders the check list itself as the report.
+
+### 12.2 Check Set, Groups, and Scoring (v1)
+* **Decision:** 22 checks in 6 groups — file & parse (3), contact & links (3), sections (5), content quality (5), skills & keywords (3), length & format (3). Each check ends pass (1.0) / warn (0.5) / fail (0.0); five structural checks (text extractable, email present, experience section, skills detected, word count) carry weight 2. The score is the weighted mean; per-group scores are the same mean within each group. Checks have **stable string ids** (`quantified_bullets`, …) and the full payload is stored as JSON.
+* **Rationale:**
+  * The groups mirror how the roadmap scoped the feature and how Enhancv-class tools categorise findings, so the report structure will feel familiar without copying anyone's check list — every threshold here was chosen from first principles and is documented in the check's own detail text.
+  * **Warn exists because resume advice is not binary:** a missing phone number or summary is a weakness, not a disqualification; only genuinely structural problems fail.
+  * **Stable ids + JSON storage** mean check definitions can evolve (thresholds retuned, checks added) without a schema migration per change, and historical results remain readable — the ids are the contract, not the column layout. This is why `ats_check_results.result` is one JSON column rather than 22 columns.
+
+### 12.3 Two Surfaces: Authenticated-Persisted and Anonymous-Never-Stored
+* **Decision:** `POST /resumes/{id}/ats-check` (auth, result persisted in `ats_check_results`, latest fetchable via GET) and `POST /ats/check-upload` (**anonymous**, parses the upload in memory, returns the result, stores nothing — no resume row, no check row). The frontend mirrors this: a signed-in "ATS check" action on the resumes page, and a public `/resume-checker` page behind a dedicated single-endpoint Next proxy route.
+* **Rationale:**
+  * The public checker is the growth surface (roadmap Phase 2 intent): it must work with zero signup friction. Storing anonymous users' resumes would be a privacy liability with no product benefit — in-memory-only is both the ethical and the simpler choice, and the page says so plainly ("checked in-memory and never stored").
+  * Persisting signed-in checks enables the improvement story (re-check after edits, compare) that analytics builds on later.
+  * The Next side gets a **separate** public proxy route (`/api/ats-check`) rather than an exception inside the authenticated proxy: the auth proxy's rule stays absolute ("no cookie, no call"), and the one public route can reach exactly one backend endpoint.
+  * **Known v1 gap, stated openly:** the anonymous endpoint has no rate limiting yet (the existing Redis limiter covers matches only). Abuse risk is bounded (10 MB cap, CPU-cheap rules), and proper limiting lands in roadmap Phase 8 hardening.
+
+### 12.4 Naming Honesty: "ATS Readiness", Never a Match Score
+* **Decision:** The score is labelled **ATS readiness** everywhere (UI, API docs, schema), with an on-screen explainer distinguishing it from the job-match score.
+* **Rationale:** A standalone check cannot know which job the resume targets; presenting its number as a "match" or generic "resume score" would invite direct comparison with the matcher's 0–100 and mislead. The two scores answer different questions — "will systems read this well?" vs "does this fit that job?" — and the product keeps them visibly separate, the same honesty rule as the matcher's split sub-scores.
+
+### 12.5 Scope Kept: Tech-Dictionary Skills in v1
+* **Decision:** The skills checks reuse the existing 200-term tech skills dictionary via `keyword_service.extract_skills`, unchanged.
+* **Rationale:** Widening the dictionary is a content project of its own (role packs, roadmap Phases 5–7), and the checker's structure doesn't depend on the dictionary's size. Reusing the exact same extractor also keeps "skills recognised" consistent between the checker and the matcher — one definition of a skill across the product.

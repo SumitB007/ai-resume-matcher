@@ -62,6 +62,7 @@ const roadmapItems = [
   {
     title: "Standalone ATS checker",
     text: "Score any resume on its own — file, sections, content quality — no job description needed.",
+    live: true,
   },
   {
     title: "Resume builder & templates",
@@ -185,7 +186,7 @@ export default function LandingPage() {
               <Card key={item.title}>
                 <CardHeader>
                   <Badge variant="secondary" className="w-fit">
-                    In the roadmap
+                    {"live" in item && item.live ? "Live now" : "In the roadmap"}
                   </Badge>
                   <CardTitle className="mt-2 text-base">{item.title}</CardTitle>
                 </CardHeader>
