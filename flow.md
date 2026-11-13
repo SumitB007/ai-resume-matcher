@@ -18,6 +18,8 @@ This document provides a comprehensive, end-to-end operational guide explaining 
    - [Flow 6: Nearest-Neighbor Job Recommendations Pipeline](#flow-6-nearest-neighbor-job-recommendations-pipeline)
    - [Flow 7: Resume Version Progression & ATS Analytics Pipeline](#flow-7-resume-version-progression--ats-analytics-pipeline)
    - [Flow 8: Downloadable PDF Assessment Report Generation](#flow-8-downloadable-pdf-assessment-report-generation)
+   - [Flow 9: Frontend Authentication via BFF Proxy (Phase 11)](#flow-9-frontend-authentication-via-bff-proxy-phase-11)
+   - [Flow 10: Frontend Matcher Workspace (Phase 11)](#flow-10-frontend-matcher-workspace-phase-11)
 5. [What Calls What: Component Call Tree Matrix](#5-what-calls-what-component-call-tree-matrix)
 
 ---
@@ -330,6 +332,59 @@ The system operates across **two distinct application runtimes**:
 
 ---
 
+
+---
+
+### Flow 9: Frontend Authentication via BFF Proxy (Phase 11)
+```
+[Browser] ──► POST /api/auth/login  (Next.js route handler, src/app/api/auth/login/route.ts)
+                  │
+                  ├── 1. Forward {email, password} ──► FastAPI POST /auth/login (API_INTERNAL_URL)
+                  ├── 2. On 200: store returned JWT in httpOnly cookie `access_token`
+                  │        (SameSite=Lax, 24h — browser JS can never read it)
+                  └── 3. Return {ok: true} — the token itself is never sent to the client
+
+[Browser] ──► any /api/backend/* request
+                  │
+                  ▼
+         [src/app/api/backend/[...path]/route.ts]
+                  ├── 1. Read `access_token` cookie (next/headers, server-side only)
+                  ├── 2. No cookie ──► 401 envelope immediately (no backend call)
+                  ├── 3. Attach Authorization: Bearer <token>, forward method/query/body
+                  │        (uploads forwarded as raw bytes; response body streamed through,
+                  │         so SSE and PDF downloads are never buffered)
+                  └── 4. Backend status + error envelope pass through untouched
+
+[Navigation] ──► src/proxy.ts (Next 16 Proxy, optimistic check only)
+                  ├── /app/* without cookie ──► redirect /login?next=<path>
+                  └── /login|/signup with cookie ──► redirect /app
+         (Real validation stays at the data layer: a backend 401 surfaces via
+          /api/auth/me, which also deletes the dead cookie.)
+```
+
+---
+
+### Flow 10: Frontend Matcher Workspace (Phase 11)
+```
+[app/match/page.tsx] ──► upload resume (FormData) ──► /api/backend/resumes ──► Flow 2 (async)
+                  │                                                     │
+                  ├── poll GET /resumes/{id}/status every 1.5s ◄────────┘ (until embedding ready)
+                  │
+                  ├── paste JD ──► /api/backend/jobs ──► Flow 3 ──► poll GET /jobs/{id}/status
+                  │
+                  ├── Run ──► POST /api/backend/match/{resume_id}/{job_id}?generate_feedback=true
+                  │              └──► Flow 4 ──► result: dial + sub-scores + section scores
+                  │                     matched skills = resume.parsed_skills ∩ job.parsed_skills
+                  │                     missing keywords = match record (scored artefact)
+                  │
+                  ├── feedback present? render it : stream it
+                  │     GET /api/backend/matches/{id}/feedback/stream ──► Flow 5 (SSE via proxy)
+                  │     regenerate: POST /matches/{id}/feedback {model} ──► replaces text
+                  │
+                  ├── bullet improver: POST /ai/rewrite-bullet {bullet, target_job, missing_skills}
+                  └── PDF: <a href=/api/backend/matches/{id}/export-pdf> ──► Flow 8
+```
+
 ## 5. What Calls What: Component Call Tree Matrix
 
 | Module / File | Primary Functions | Called By | Calls Into / Dependencies |
@@ -352,3 +407,8 @@ The system operates across **two distinct application runtimes**:
 | **`app/tasks/celery_app.py`** | Celery instance | `uvicorn`, Celery worker | Redis (DB 1 broker, DB 2 backend) |
 | **`app/tasks/resume_tasks.py`** | `process_resume_task` | `resumes.py` via Celery queue | `app.database.get_sync_db`, `app.services.keyword_service`, `app.services.embedding_service` |
 | **`app/tasks/embedding_tasks.py`** | `process_job_task`, `batch_process_embeddings_task` | `jobs.py` via Celery queue | `app.database.get_sync_db`, `app.services.keyword_service`, `app.services.embedding_service` |
+| **`frontend/src/proxy.ts`** | Optimistic auth redirects | Next.js runtime (every /app, /login, /signup navigation) | `access_token` cookie presence |
+| **`frontend/src/app/api/auth/*`** | `login`, `register`, `logout`, `me` route handlers | Browser (login/signup pages) | FastAPI `/auth/*` via `API_INTERNAL_URL`; sets/clears the httpOnly cookie |
+| **`frontend/src/app/api/backend/[...path]/route.ts`** | Generic authenticated proxy | Browser (all app data calls) | FastAPI (any path), attaching the cookie JWT server-side; streams SSE/PDF bodies |
+| **`frontend/src/lib/api/client.ts`** | `api.*` typed calls, `ApiError`, `streamMatchFeedback` | React components/hooks | Next.js `/api/*` route handlers only (never FastAPI directly) |
+| **`frontend/src/app/app/match/page.tsx`** | Matcher workspace (upload → poll → match → feedback) | Signed-in user | `lib/api/client.ts`, TanStack Query (status polling) |
