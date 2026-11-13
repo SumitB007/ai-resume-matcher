@@ -7,6 +7,9 @@ python-multipart
 
 # ─── Database ───
 sqlalchemy[asyncio]
+# SQLAlchemy 2.1's default postgresql:// sync dialect is psycopg v3;
+# without this, fresh installs crash importing app.database (decisions.md §13.7).
+psycopg[binary]
 asyncpg
 alembic
 pgvector

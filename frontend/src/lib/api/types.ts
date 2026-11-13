@@ -130,6 +130,119 @@ export interface AtsCheckResult {
   created_at: string | null;
 }
 
+// ── Builder documents (mirror app/services/document_service.py) ──
+
+export interface DocPersonal {
+  full_name: string;
+  title: string;
+  email: string;
+  phone: string;
+  location: string;
+  links: string[];
+}
+
+export interface DocExperience {
+  role: string;
+  company: string;
+  location: string;
+  start: string;
+  end: string;
+  current: boolean;
+  bullets: string[];
+}
+
+export interface DocEducation {
+  school: string;
+  degree: string;
+  field: string;
+  start: string;
+  end: string;
+}
+
+export interface DocSkillGroup {
+  label: string;
+  items: string[];
+}
+
+export interface DocProject {
+  name: string;
+  description: string;
+  bullets: string[];
+}
+
+export interface DocCustomSection {
+  title: string;
+  items: string[];
+}
+
+export interface DocumentContent {
+  personal: DocPersonal;
+  summary: string;
+  experience: DocExperience[];
+  education: DocEducation[];
+  skills: { groups: DocSkillGroup[] };
+  projects: DocProject[];
+  certifications: string[];
+  languages: string[];
+  custom_sections: DocCustomSection[];
+}
+
+export interface DocTheme {
+  accent?: string;
+  font?: "sans" | "serif";
+  density?: "normal" | "compact";
+}
+
+export interface ResumeDocument {
+  id: number;
+  title: string;
+  template_id: string;
+  theme: DocTheme;
+  content: DocumentContent;
+  resume_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ResumeDocumentListItem {
+  id: number;
+  title: string;
+  template_id: string;
+  resume_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const TEMPLATE_IDS = [
+  "classic",
+  "modern",
+  "compact-tech",
+  "sidebar",
+  "minimal",
+  "graduate",
+] as const;
+
+export const TEMPLATE_LABELS: Record<string, string> = {
+  classic: "Classic",
+  modern: "Modern",
+  "compact-tech": "Compact Tech",
+  sidebar: "Two-Column Sidebar",
+  minimal: "Minimal",
+  graduate: "Graduate",
+};
+
+export const EMPTY_CONTENT: DocumentContent = {
+  personal: { full_name: "", title: "", email: "", phone: "", location: "", links: [] },
+  summary: "",
+  experience: [],
+  education: [],
+  skills: { groups: [] },
+  projects: [],
+  certifications: [],
+  languages: [],
+  custom_sections: [],
+};
+
 /** The backend's standard error envelope (app/main.py exception handlers). */
 export interface ApiErrorBody {
   error: boolean;

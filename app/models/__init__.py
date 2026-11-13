@@ -8,5 +8,9 @@ from app.models.resume import Resume
 from app.models.job import JobDescription
 from app.models.match import MatchResult
 from app.models.ats_check import AtsCheckResult
+from app.models.resume_document import ResumeDocument
 
-__all__ = ["User", "Resume", "JobDescription", "MatchResult", "AtsCheckResult"]
+__all__ = [
+    "User", "Resume", "JobDescription", "MatchResult", "AtsCheckResult",
+    "ResumeDocument",
+]
