@@ -9,8 +9,9 @@ from app.models.job import JobDescription
 from app.models.match import MatchResult
 from app.models.ats_check import AtsCheckResult
 from app.models.resume_document import ResumeDocument
+from app.models.cover_letter import CoverLetter
 
 __all__ = [
     "User", "Resume", "JobDescription", "MatchResult", "AtsCheckResult",
-    "ResumeDocument",
+    "ResumeDocument", "CoverLetter",
 ]

@@ -243,6 +243,51 @@ export const EMPTY_CONTENT: DocumentContent = {
   custom_sections: [],
 };
 
+// ── Cover letters (mirror app/schemas/cover_letter.py) ──
+
+export interface LetterSender {
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+  location: string;
+}
+
+export interface LetterContent {
+  sender: LetterSender;
+  recipient: { name: string; company: string; role: string };
+  date: string;
+  greeting: string;
+  paragraphs: string[];
+  closing: string;
+  signature_name: string;
+}
+
+export interface CoverLetter {
+  id: number;
+  title: string;
+  template_id: string;
+  theme: DocTheme;
+  content: LetterContent;
+  resume_id: number | null;
+  resume_document_id: number | null;
+  job_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CoverLetterListItem {
+  id: number;
+  title: string;
+  template_id: string;
+  resume_id: number | null;
+  job_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const LETTER_TONES = ["professional", "enthusiastic", "concise"] as const;
+
 /** The backend's standard error envelope (app/main.py exception handlers). */
 export interface ApiErrorBody {
   error: boolean;

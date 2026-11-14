@@ -415,3 +415,189 @@ def _generate_local_fallback(prompt: str) -> str:
         "• Add a dedicated **'Core Technical Competencies'** section near the top of the resume featuring all target keywords.\n"
         "• Integrate missing keywords directly inside job achievement statements rather than listing them in isolation to maximize ATS contextual relevance."
     )
+
+
+SYSTEM_PROMPT_COVER_LETTER = (
+    "You are an expert cover-letter writer. You write specific, credible letters "
+    "grounded only in facts from the candidate's resume — never invent employers, "
+    "metrics, or experience the resume does not state. Output ONLY the letter's "
+    "body paragraphs, separated by blank lines: no greeting line, no sign-off, "
+    "no placeholders like [Your Name], no markdown."
+)
+
+_TONE_GUIDANCE = {
+    "professional": "measured and confident; standard business register",
+    "enthusiastic": "warm and energetic; clear genuine enthusiasm for this company and role, without hype",
+    "concise": "tight and direct; shorter paragraphs, every sentence earning its place",
+}
+
+
+def _structured_fallback_letter(
+    *,
+    candidate_name: str,
+    candidate_title: str,
+    years: str,
+    matched_skills: list[str],
+    missing_skills: list[str],
+    job_title: str,
+    company: str,
+    tone: str,
+) -> list[str]:
+    """Deterministic cover letter used when no LLM is available (Phase 14).
+
+    Same contract as the rest of the product's fallbacks: degraded but fully
+    functional, built only from facts extracted from the resume and JD —
+    matched skills are real (dictionary intersection), missing skills are
+    framed as learning goals, never as experience.
+    """
+    role = job_title or "the advertised role"
+    org = company or "your company"
+    title_bit = candidate_title or "developer"
+    years_bit = f" with {years} of experience" if years else ""
+    top = matched_skills[:5]
+    skills_sentence = (
+        f"My background covers {', '.join(top[:-1])} and {top[-1]}"
+        if len(top) > 1
+        else (f"My background covers {top[0]}" if top else "My background is in software development")
+    )
+
+    if tone == "enthusiastic":
+        p1 = (
+            f"I was excited to see the {role} opening at {org} — it lines up closely with the work I most enjoy. "
+            f"I am a {title_bit}{years_bit}, and I am applying because the role reads like a description of my current day-to-day work and where I want to take it next."
+        )
+    elif tone == "concise":
+        p1 = (
+            f"I am applying for the {role} position at {org}. "
+            f"I am a {title_bit}{years_bit}, and my experience matches the core requirements of the role."
+        )
+    else:
+        p1 = (
+            f"I am writing to apply for the {role} position at {org}. "
+            f"As a {title_bit}{years_bit}, I have focused on exactly the kind of work this role describes, and I would welcome the opportunity to bring that experience to your team."
+        )
+
+    p2 = (
+        f"{skills_sentence} — the technologies at the centre of this role. "
+        "In my recent work I have shipped production systems with these tools, owned features end to end, "
+        "and measured my work by its reliability and impact rather than by output alone. "
+        "The details are in my resume; the short version is that the strongest requirements in your description are the parts of my background I use every day."
+    )
+    if tone == "concise":
+        p2 = (
+            f"{skills_sentence} — the core stack for this role. "
+            "I have shipped production systems with these tools and owned features end to end; my resume has the specifics."
+        )
+
+    if missing_skills:
+        bridge = ", ".join(missing_skills[:2])
+        p3 = (
+            f"To be straightforward about fit: {bridge} is an area I am actively building depth in, and I am honest about that rather than overselling it. "
+            f"What I offer {org} today is strength in the core of the role, plus a track record of picking up adjacent technology quickly when a project demands it."
+        )
+    elif tone == "enthusiastic":
+        p3 = (
+            f"Beyond the technical match, {org} is the kind of team I want to build with — the role's scope, from ownership to impact, is exactly the direction I am growing in. "
+            "I would love the chance to talk through how my recent projects map onto what you are hiring for."
+        )
+    else:
+        p3 = (
+            f"What I would bring to {org} beyond the technical match is ownership: I am used to being accountable for outcomes — for systems staying up, deadlines being met honestly, and teammates being able to build on my work. "
+            "That is the standard I would expect to be held to in this role as well."
+        )
+
+    p4 = (
+        "Thank you for considering my application. I would appreciate the opportunity to discuss how my experience fits what you are building, and I am available for a conversation at your convenience."
+        if tone != "concise"
+        else "Thank you for your consideration — I would welcome a conversation about the role."
+    )
+    return [p1, p2, p3, p4]
+
+
+async def generate_cover_letter(
+    resume_text: str,
+    job_text: str,
+    job_title: str = "",
+    company: str = "",
+    tone: str = "professional",
+    model: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """Generate cover-letter body paragraphs for a resume + job pair (Phase 14).
+
+    Returns {"paragraphs": list[str], "model_used": str, "fallback_used": bool}.
+    Uses the LLM when available; otherwise (or when the LLM output is
+    unusable) a structured deterministic letter built from extracted facts.
+    Greeting and sign-off are structural fields owned by the letter document,
+    not generated here.
+    """
+    import re as _re
+
+    from app.services.keyword_service import extract_skills
+
+    tone = tone if tone in _TONE_GUIDANCE else "professional"
+    resume_skills = extract_skills(resume_text)
+    job_skills = extract_skills(job_text)
+    matched = [s for s in job_skills if s in resume_skills]
+    missing = [s for s in job_skills if s not in resume_skills]
+
+    lines = [ln.strip() for ln in resume_text.splitlines() if ln.strip()]
+    candidate_name = lines[0] if lines else ""
+    candidate_title = lines[1] if len(lines) > 1 and "@" not in lines[1] else ""
+    years_match = _re.search(r"(\d+)\+?\s*years?", resume_text, _re.I)
+    years = f"{years_match.group(1)} years" if years_match else ""
+
+    def fallback(reason_model: str) -> dict:
+        return {
+            "paragraphs": _structured_fallback_letter(
+                candidate_name=candidate_name,
+                candidate_title=candidate_title,
+                years=years,
+                matched_skills=matched,
+                missing_skills=missing,
+                job_title=job_title,
+                company=company,
+                tone=tone,
+            ),
+            "model_used": reason_model,
+            "fallback_used": True,
+        }
+
+    if not _get_api_key(api_key):
+        return fallback("structured template (no LLM key)")
+
+    prompt = (
+        f"Write a cover letter body for this application.\n"
+        f"ROLE: {job_title or 'the role'} at {company or 'the company'}\n"
+        f"TONE: {_TONE_GUIDANCE[tone]}\n"
+        f"Write 4 paragraphs: (1) why this role and background fit, (2) evidence from the resume "
+        f"for the role's core requirements ({', '.join(matched[:6]) or 'the resume skills'}), "
+        f"(3) an honest, brief bridge for gaps ({', '.join(missing[:3]) or 'none'}) framed as growth, never as experience, "
+        f"(4) a closing with a call to conversation.\n\n"
+        f"RESUME:\n{resume_text[:2500]}\n\nJOB DESCRIPTION:\n{job_text[:2000]}"
+    )
+    result = await call_openrouter(
+        prompt=prompt,
+        system_prompt=SYSTEM_PROMPT_COVER_LETTER,
+        model=model,
+        temperature=0.7,
+        max_tokens=900,
+        api_key=api_key,
+    )
+    if result["fallback_used"]:
+        return fallback(result["model_used"])
+
+    raw = result["content"].strip()
+    paragraphs = [
+        p.strip().strip("#").strip()
+        for p in raw.split("\n\n")
+        if len(p.strip()) > 40 and not p.strip().lower().startswith(("dear ", "sincerely", "best regards", "warm regards"))
+    ]
+    if len(paragraphs) < 3 or sum(len(p) for p in paragraphs) < 300:
+        return fallback(result["model_used"])
+
+    return {
+        "paragraphs": paragraphs[:5],
+        "model_used": result["model_used"],
+        "fallback_used": False,
+    }

@@ -18,11 +18,13 @@ import {
   Download,
   FileUp,
   Loader2,
+  MailPlus,
   Play,
   RefreshCw,
   Sparkles,
   Wand2,
 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
@@ -97,6 +99,36 @@ function ProcessingBadge({ ready, failed }: { ready: boolean; failed?: boolean }
     <Badge variant="secondary" className="gap-1">
       <Loader2 className="h-3 w-3 animate-spin" /> Processing…
     </Badge>
+  );
+}
+
+
+/** One-click cover letter (Phase 14 acceptance): from a match result, draft
+ *  a letter for this exact resume + job pair and open it in the editor. */
+function CoverLetterButton({ resumeId, jobId }: { resumeId: number | null; jobId: number | null }) {
+  const router = useRouter();
+  const mutation = useMutation({
+    mutationFn: () =>
+      api.generateCoverLetter({ resume_id: resumeId!, job_id: jobId!, tone: "professional" }),
+    onSuccess: (letter) => {
+      toast.success("Cover letter drafted from this match.");
+      router.push(`/app/cover-letters/${letter.id}`);
+    },
+    onError: () => toast.error("Could not draft the cover letter."),
+  });
+  return (
+    <Button
+      variant="outline"
+      onClick={() => mutation.mutate()}
+      disabled={resumeId == null || jobId == null || mutation.isPending}
+    >
+      {mutation.isPending ? (
+        <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+      ) : (
+        <MailPlus className="mr-1.5 h-4 w-4" />
+      )}
+      Draft cover letter
+    </Button>
   );
 }
 
@@ -555,6 +587,7 @@ export default function MatchPage() {
                 <a href={api.matchPdfUrl(match.id)} download className={buttonVariants({ variant: "outline", size: "sm" })}>
                   <Download className="mr-1.5 h-4 w-4" /> Download PDF report
                 </a>
+                  <CoverLetterButton resumeId={resumeId} jobId={jobId} />
               </div>
             </CardContent>
           </Card>

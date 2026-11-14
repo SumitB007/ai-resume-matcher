@@ -4,6 +4,8 @@
 
 import type {
   AtsCheckResult,
+  CoverLetter,
+  CoverLetterListItem,
   DashboardData,
   ItemStatus,
   Job,
@@ -15,6 +17,7 @@ import type {
   ResumeDocumentListItem,
   DocTheme,
   DocumentContent,
+  LetterContent,
   User,
 } from "./types";
 
@@ -171,6 +174,40 @@ export const api = {
     request<Resume>(`/documents/${id}/sync-resume`, { method: "POST" }),
   documentAtsCheck: (id: number) =>
     request<AtsCheckResult>(`/documents/${id}/ats-check`, { method: "POST" }),
+
+  // ── Cover letters ──
+  listCoverLetters: () => request<CoverLetterListItem[]>("/cover-letters"),
+  getCoverLetter: (id: number) => request<CoverLetter>(`/cover-letters/${id}`),
+  createCoverLetter: (body: {
+    title?: string;
+    template_id?: string;
+    theme?: DocTheme;
+    content?: LetterContent;
+  }) => request<CoverLetter>("/cover-letters", jsonInit("POST", body)),
+  updateCoverLetter: (
+    id: number,
+    body: Partial<{
+      title: string;
+      template_id: string;
+      theme: DocTheme;
+      content: LetterContent;
+    }>,
+  ) => request<CoverLetter>(`/cover-letters/${id}`, jsonInit("PUT", body)),
+  deleteCoverLetter: (id: number) =>
+    request<void>(`/cover-letters/${id}`, { method: "DELETE" }),
+  duplicateCoverLetter: (id: number) =>
+    request<CoverLetter>(`/cover-letters/${id}/duplicate`, { method: "POST" }),
+  generateCoverLetter: (body: {
+    resume_id?: number;
+    resume_document_id?: number;
+    job_id?: number;
+    job_text?: string;
+    job_title?: string;
+    company?: string;
+    recipient_name?: string;
+    tone?: string;
+    template_id?: string;
+  }) => request<CoverLetter>("/cover-letters/generate", jsonInit("POST", body)),
 
   // ── ATS checker (authenticated, persisted) ──
   runAtsCheck: (resumeId: number) =>
