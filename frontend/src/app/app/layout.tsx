@@ -7,6 +7,7 @@
 
 import {
   Briefcase,
+  FilePen,
   FileText,
   History,
   LayoutDashboard,
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { Logo } from "@/components/site-header";
@@ -28,12 +29,40 @@ const navItems = [
   { href: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/app/match", label: "Job Matcher", icon: ScanSearch, exact: false },
   { href: "/app/resumes", label: "My Resumes", icon: FileText, exact: false },
+  { href: "/app/builder", label: "Resume Builder", icon: FilePen, exact: false },
   { href: "/app/jobs", label: "Saved Jobs", icon: Briefcase, exact: false },
   { href: "/app/matches", label: "Match History", icon: History, exact: false },
 ];
 
-export default function AppLayout({ children }: LayoutProps<"/app">) {
+function NavLinks() {
   const pathname = usePathname();
+  return (
+    <>
+      {navItems.map((item) => {
+        const active = item.exact
+          ? pathname === item.href
+          : pathname.startsWith(item.href);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={cn(
+              "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
+              active
+                ? "bg-blue-700/10 text-blue-800"
+                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <item.icon className="h-4 w-4" />
+            {item.label}
+          </Link>
+        );
+      })}
+    </>
+  );
+}
+
+export default function AppLayout({ children }: LayoutProps<"/app">) {
   const router = useRouter();
 
   const meQuery = useQuery({
@@ -70,26 +99,9 @@ export default function AppLayout({ children }: LayoutProps<"/app">) {
           </Button>
         </div>
         <nav className="flex gap-1 overflow-x-auto px-3 pb-3 lg:flex-col lg:px-3 lg:pb-0">
-          {navItems.map((item) => {
-            const active = item.exact
-              ? pathname === item.href
-              : pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors",
-                  active
-                    ? "bg-blue-700/10 text-blue-800"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+          <Suspense fallback={null}>
+            <NavLinks />
+          </Suspense>
         </nav>
         <div className="mt-auto hidden items-center justify-between gap-2 border-t px-4 py-3 lg:flex lg:px-6">
           <span className="truncate text-sm text-muted-foreground">

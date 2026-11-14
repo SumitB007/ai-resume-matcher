@@ -21,6 +21,7 @@ This document provides a comprehensive, end-to-end operational guide explaining 
    - [Flow 9: Frontend Authentication via BFF Proxy (Phase 11)](#flow-9-frontend-authentication-via-bff-proxy-phase-11)
    - [Flow 10: Frontend Matcher Workspace (Phase 11)](#flow-10-frontend-matcher-workspace-phase-11)
    - [Flow 11: Standalone ATS Checker (Phase 12)](#flow-11-standalone-ats-checker-phase-12)
+   - [Flow 12: Resume Builder — Edit, Sync, Print (Phase 13)](#flow-12-resume-builder--edit-sync-print-phase-13)
 5. [What Calls What: Component Call Tree Matrix](#5-what-calls-what-component-call-tree-matrix)
 
 ---
@@ -420,6 +421,30 @@ Anonymous path (public /resume-checker page):
                   └── score = weighted mean ×100; group scores = per-group means
 ```
 
+
+---
+
+### Flow 12: Resume Builder — Edit, Sync, Print (Phase 13)
+```
+[app/builder] ──► create (template pick) / duplicate / import-from-resume
+                  │ import: parse_text_to_content(raw_text) → draft document
+                  ▼
+[app/builder/[id] editor] ── Zustand store holds the document tree
+                  ├── every edit → dirty → 1.2s debounce → PUT /documents/{id}
+                  ├── live preview: ResumePreview (same component as print)
+                  ├── ATS score → POST /documents/{id}/ats-check
+                  │      └── flatten → run_ats_checks (Flow 11 engine, unpersisted)
+                  └── Sync → POST /documents/{id}/sync-resume
+                         ├── flatten_content_to_text(content) → raw_text
+                         ├── create/update linked Resume row (commit FIRST, §7.2)
+                         ├── invalidate_user_matches (stale cache out)
+                         └── process_resume_task.delay() → Flow 2 embedding pipeline
+                             → the built resume now matches like any upload (Flow 4)
+
+[PDF button] ──► /print/documents/{id} ──► ResumePreview at exact A4 + @page CSS
+                  └── browser print dialog → Save as PDF (decisions.md §13.5)
+```
+
 ## 5. What Calls What: Component Call Tree Matrix
 
 | Module / File | Primary Functions | Called By | Calls Into / Dependencies |
@@ -450,3 +475,7 @@ Anonymous path (public /resume-checker page):
 | **`app/services/ats_service.py`** | `run_ats_checks()` — 22 deterministic checks, weighted scoring | `app/api/ats.py` (both endpoints), unit tests | `app.services.keyword_service.extract_skills` |
 | **`app/api/ats.py`** | `run_resume_ats_check`, `get_resume_ats_check`, `anonymous_ats_check` | Next.js proxies (auth + public) | `ats_service`, `AtsCheckResult`, pdf/docx parsers |
 | **`frontend/src/app/resume-checker/page.tsx` + `api/ats-check/route.ts`** | Public anonymous checker | Anyone (no account) | FastAPI `POST /ats/check-upload` only |
+| **`app/services/document_service.py`** | `flatten_content_to_text()`, `parse_text_to_content()` | `app/api/documents.py` | — (pure) |
+| **`app/api/documents.py`** | CRUD, `duplicate`, `import_from_resume`, `sync_resume`, `document_ats_check` | Builder UI via BFF proxy | `document_service`, `ats_service`, `keyword_service`, Celery `process_resume_task`, `cache_service` |
+| **`frontend/src/lib/store/editor-store.ts`** | Editor document tree + dirty/saving state | Builder editor page | TanStack Query data (init), API client (autosave) |
+| **`frontend/src/components/resume-preview.tsx`** | 6 template layouts, `A4Page` frame | Editor preview, print route | Document content + theme |

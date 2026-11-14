@@ -1,4 +1,4 @@
-"""add ats_check_results table (Phase 11 — standalone ATS checker)
+"""add ats_check_results table (Phase 12 — standalone ATS checker)
 
 Revision ID: c7d2e9f4a1b8
 Revises: 5ac208bfc6b1
