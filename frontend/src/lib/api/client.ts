@@ -11,6 +11,10 @@ import type {
   MatchListItem,
   ModelList,
   Resume,
+  ResumeDocument,
+  ResumeDocumentListItem,
+  DocTheme,
+  DocumentContent,
   User,
 } from "./types";
 
@@ -136,6 +140,37 @@ export const api = {
 
   // ── Analytics ──
   dashboard: () => request<DashboardData>("/analytics/dashboard"),
+
+  // ── Builder documents ──
+  listDocuments: () => request<ResumeDocumentListItem[]>("/documents"),
+  getDocument: (id: number) => request<ResumeDocument>(`/documents/${id}`),
+  createDocument: (body: {
+    title?: string;
+    template_id?: string;
+    theme?: DocTheme;
+    content?: DocumentContent;
+  }) => request<ResumeDocument>("/documents", jsonInit("POST", body)),
+  updateDocument: (
+    id: number,
+    body: Partial<{
+      title: string;
+      template_id: string;
+      theme: DocTheme;
+      content: DocumentContent;
+    }>,
+  ) => request<ResumeDocument>(`/documents/${id}`, jsonInit("PUT", body)),
+  deleteDocument: (id: number) =>
+    request<void>(`/documents/${id}`, { method: "DELETE" }),
+  duplicateDocument: (id: number) =>
+    request<ResumeDocument>(`/documents/${id}/duplicate`, { method: "POST" }),
+  importDocument: (resumeId: number) =>
+    request<ResumeDocument>(`/documents/import-from-resume/${resumeId}`, {
+      method: "POST",
+    }),
+  syncDocumentResume: (id: number) =>
+    request<Resume>(`/documents/${id}/sync-resume`, { method: "POST" }),
+  documentAtsCheck: (id: number) =>
+    request<AtsCheckResult>(`/documents/${id}/ats-check`, { method: "POST" }),
 
   // ── ATS checker (authenticated, persisted) ──
   runAtsCheck: (resumeId: number) =>

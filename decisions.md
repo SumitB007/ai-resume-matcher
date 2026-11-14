@@ -18,6 +18,7 @@ This document details every major architectural, technical, library, and impleme
 10. [Phase 10: PDF Export & Global Resilience](#10-phase-10-pdf-export--global-resilience)
 11. [Phase 11: Frontend (Next.js) & Docker Stack](#11-phase-11-frontend-nextjs--docker-stack)
 12. [Phase 12: Standalone ATS Checker](#12-phase-12-standalone-ats-checker-roadmap-phase-2)
+13. [Phase 13: Resume Builder, Templates & PDF](#13-phase-13-resume-builder-templates--pdf-roadmap-phase-3)
 
 ---
 
@@ -344,3 +345,42 @@ This document details every major architectural, technical, library, and impleme
 ### 12.5 Scope Kept: Tech-Dictionary Skills in v1
 * **Decision:** The skills checks reuse the existing 200-term tech skills dictionary via `keyword_service.extract_skills`, unchanged.
 * **Rationale:** Widening the dictionary is a content project of its own (role packs, roadmap Phases 5–7), and the checker's structure doesn't depend on the dictionary's size. Reusing the exact same extractor also keeps "skills recognised" consistent between the checker and the matcher — one definition of a skill across the product.
+
+---
+
+## 13. Phase 13: Resume Builder, Templates & PDF (Roadmap Phase 3)
+
+### 13.1 A Separate Document Model — Synced Into the Pipeline, Not Merged With It
+* **Decision:** Built resumes live in a new `resume_documents` table (content JSON, template id, theme JSON, title) — **not** in `resumes`. A document joins the existing pipeline only through an explicit **sync**: `POST /documents/{id}/sync-resume` flattens its content to text and creates/updates a linked `Resume` row (`resume_documents.resume_id`), dispatching the same Celery embedding task uploads use, and invalidating the user's cached matches.
+* **Rationale:**
+  * The two artefacts have different shapes and lifecycles: an upload is extracted text that never changes; a document is structured, endlessly edited state. One model would force nullable structure fields onto uploads or lossy text onto documents.
+  * Sync-as-a-bridge means **zero changes to matching, ATS, recommendations, or analytics** — a built resume is indistinguishable from an upload downstream, which is exactly the roadmap's "builder and uploads converge" requirement.
+  * Sync is explicit (a button, a visible "Synced" state) rather than on every autosave: embedding generation costs real compute, and matching against a half-typed resume is meaningless. The user syncs when the document is worth scoring.
+
+### 13.2 Flattening Is a Backend Function With Standard Headings
+* **Decision:** `document_service.flatten_content_to_text()` renders content JSON to plain text server-side, emitting the standard section words ("Summary", "Experience", "Skills", "Education", …) and bullet glyphs.
+* **Rationale:** The flattened text feeds three consumers (embeddings, keyword extraction, the ATS section checks). Producing it in one backend place — instead of letting the frontend assemble text — guarantees every consumer sees identical text, and emitting the standard headings means built resumes pass the ATS section checks by construction rather than by luck. It is pure and unit-tested, including a round-trip test (import → flatten keeps the key facts).
+
+### 13.3 Editor State: Zustand Arrives Exactly Where §11.6 Said It Would
+* **Decision:** The editor's document tree, dirty flag, and save state live in a **Zustand store** (`src/lib/store/editor-store.ts`), initialised from TanStack Query data and persisted by a 1.2 s-debounced autosave (PUT with the full document). Entry reordering uses up/down controls, not drag-and-drop.
+* **Rationale:** This is the high-frequency nested client state §11.6 predicted (and deferred Zustand for): per-keystroke updates through React Query mutations would be clumsy and slow. Deep-copy-then-mutate updates keep the code obviously correct at document scale; documents are small, so the copy cost is irrelevant. **dnd-kit was deliberately not added:** reorder buttons are fully functional, keyboard-accessible, and one less dependency to learn wrong — drag can layer on later without changing the data model.
+
+### 13.4 Import Is Heuristic, and Lands as a Draft
+* **Decision:** `POST /documents/import-from-resume/{resume_id}` splits an upload's extracted text into a document with a deterministic heading parser (`parse_text_to_content`): standard headings become sections, year ranges split roles, contact patterns fill the personal block.
+* **Rationale:** Import must work with no OpenRouter key and no cost, like everything else in the checker's spirit. A heuristic parser gets the common shapes right (and is unit-tested on one), and where it's wrong the cost is low *because the result is always presented as a draft to review* — never treated as ground truth. LLM structured extraction remains the Phase 5 upgrade, behind the same endpoint shape.
+
+### 13.5 PDF via the Browser's Print Path — a Recorded Deviation From the Roadmap
+* **Decision:** The roadmap chose headless-Chromium (Playwright) server-side PDF. **v1 instead uses a dedicated print route** (`/print/documents/[id]`) rendering the same preview component at exact A4 with `@page` CSS; "Download PDF" opens it and the browser's Save-as-PDF produces the file. The template renderer is a single React component shared by editor preview and print route.
+* **Rationale:**
+  * **WYSIWYG is guaranteed, not approximated:** one renderer for preview and print means the PDF cannot diverge from what the user approved — the exact property the roadmap's spike was meant to prove for Chromium.
+  * Docker is deferred (Sumit's call, §11.2 update), and a server-side Chromium is precisely the kind of heavy runtime that deferral argues against adding now; it also can't be verified in the current dev environment.
+  * **The cost is real and stated:** the user picks Save-as-PDF in a dialog instead of getting a one-click download, and print output varies slightly by browser. When deployment lands (Phase 8), server-side Chromium can replace the last step without touching templates or the editor — the print route already isolates rendering.
+  * ATS safety is preserved regardless: PDFs produced this way carry a real text layer in DOM order, and the pipeline never parses the PDF anyway — it parses the backend's flattened text (§13.2).
+
+### 13.6 Six Original Templates, Three Theme Knobs
+* **Decision:** Six templates ship (Classic, Modern, Compact Tech, Two-Column Sidebar, Minimal, Graduate) as layout variants of one renderer. Customisation is limited to accent colour, font pairing (sans/serif), and density — plus section/entry order.
+* **Rationale:** Original designs (no reference-site templates copied — the roadmap's standing caution). Constraining the knobs is the ATS-safety strategy: users can personalise without ever producing the unreadable layouts free-form editors allow. The sidebar template's visual column order cannot corrupt parsing because the pipeline reads the backend flattener's text, not the rendered page (§13.2, §13.5).
+
+### 13.7 Dependency Fix Found by the First Fresh Install: psycopg v3
+* **Decision:** Added `psycopg[binary]` to `requirements.txt` (psycopg2-binary kept).
+* **Rationale:** A fresh `pip install` today resolves the unpinned `sqlalchemy[asyncio]` to **SQLAlchemy 2.1**, whose default `postgresql://` *sync* dialect is psycopg v3 — but requirements only shipped psycopg2, so `app/database.py`'s sync engine crashed at import (`ModuleNotFoundError: No module named 'psycopg'`) and Alembic could not run at all. Existing installs on SQLAlchemy 2.0 never saw it (2.0 defaults to psycopg2). Adding the v3 driver fixes fresh installs without disturbing existing ones; pinning SQLAlchemy back would only freeze the problem. Found during the first full native bring-up of the backend in the dev environment (Postgres 16 + pgvector 0.8 + Redis, all migrations applied including Phases 12–13).

@@ -67,6 +67,7 @@ const roadmapItems = [
   {
     title: "Resume builder & templates",
     text: "Build a resume in the browser with ATS-safe templates, live preview, and one-click PDF export.",
+    live: true,
   },
   {
     title: "Cover letters",

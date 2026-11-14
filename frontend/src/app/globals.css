@@ -128,3 +128,18 @@
     @apply font-sans;
   }
 }
+/* ── Resume print (Phase 13) ─────────────────────────────────────────────
+   The print route renders the resume inside .resume-a4 at exact A4 size.
+   @page removes browser margins/headers so Save-as-PDF yields a clean,
+   single-design page; the on-screen shadow/ring must not print. */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  .resume-a4 {
+    box-shadow: none !important;
+    --tw-ring-shadow: 0 0 #0000 !important;
+  }
+}
