@@ -20,6 +20,7 @@ This document provides a comprehensive, end-to-end operational guide explaining 
    - [Flow 8: Downloadable PDF Assessment Report Generation](#flow-8-downloadable-pdf-assessment-report-generation)
    - [Flow 9: Frontend Authentication via BFF Proxy (Phase 11)](#flow-9-frontend-authentication-via-bff-proxy-phase-11)
    - [Flow 10: Frontend Matcher Workspace (Phase 11)](#flow-10-frontend-matcher-workspace-phase-11)
+   - [Flow 11: Standalone ATS Checker (Phase 12)](#flow-11-standalone-ats-checker-phase-12)
 5. [What Calls What: Component Call Tree Matrix](#5-what-calls-what-component-call-tree-matrix)
 
 ---
@@ -385,6 +386,40 @@ The system operates across **two distinct application runtimes**:
                   └── PDF: <a href=/api/backend/matches/{id}/export-pdf> ──► Flow 8
 ```
 
+
+---
+
+### Flow 11: Standalone ATS Checker (Phase 12)
+```
+Signed-in path:
+[app/resumes page] ──► POST /api/backend/resumes/{id}/ats-check ──► proxy (Flow 9)
+                  │
+                  ▼
+         [app/api/ats.py: run_resume_ats_check()]
+                  ├── 1. Load resume (ownership-scoped query; 404 if not yours)
+                  ├── 2. run_ats_checks(resume.raw_text, resume.parsed_skills) — pure, sync
+                  ├── 3. Persist AtsCheckResult (score + full JSON payload)
+                  └── 4. Return result ──► UI expands AtsResultView under the resume card
+         [GET /resumes/{id}/ats-check returns the latest persisted run]
+
+Anonymous path (public /resume-checker page):
+[Browser] ──► POST /api/ats-check (dedicated public proxy route, no cookie)
+                  │
+                  ▼
+         [app/api/ats.py: anonymous_ats_check()]
+                  ├── 1. Validate upload (type/size — mirrors /resumes rules)
+                  ├── 2. Extract text in-memory (pdfplumber / python-docx)
+                  ├── 3. run_ats_checks(raw_text) — skills extracted on the fly
+                  └── 4. Return result. NOTHING is persisted: no resume row,
+                         no check row, text discarded with the request.
+
+[app/services/ats_service.py: run_ats_checks()]
+                  ├── 22 checks in 6 groups (file_parse, contact, sections,
+                  │    content, skills, length_format); pass=1.0/warn=0.5/fail=0.0,
+                  │    5 structural checks weighted ×2
+                  └── score = weighted mean ×100; group scores = per-group means
+```
+
 ## 5. What Calls What: Component Call Tree Matrix
 
 | Module / File | Primary Functions | Called By | Calls Into / Dependencies |
@@ -412,3 +447,6 @@ The system operates across **two distinct application runtimes**:
 | **`frontend/src/app/api/backend/[...path]/route.ts`** | Generic authenticated proxy | Browser (all app data calls) | FastAPI (any path), attaching the cookie JWT server-side; streams SSE/PDF bodies |
 | **`frontend/src/lib/api/client.ts`** | `api.*` typed calls, `ApiError`, `streamMatchFeedback` | React components/hooks | Next.js `/api/*` route handlers only (never FastAPI directly) |
 | **`frontend/src/app/app/match/page.tsx`** | Matcher workspace (upload → poll → match → feedback) | Signed-in user | `lib/api/client.ts`, TanStack Query (status polling) |
+| **`app/services/ats_service.py`** | `run_ats_checks()` — 22 deterministic checks, weighted scoring | `app/api/ats.py` (both endpoints), unit tests | `app.services.keyword_service.extract_skills` |
+| **`app/api/ats.py`** | `run_resume_ats_check`, `get_resume_ats_check`, `anonymous_ats_check` | Next.js proxies (auth + public) | `ats_service`, `AtsCheckResult`, pdf/docx parsers |
+| **`frontend/src/app/resume-checker/page.tsx` + `api/ats-check/route.ts`** | Public anonymous checker | Anyone (no account) | FastAPI `POST /ats/check-upload` only |

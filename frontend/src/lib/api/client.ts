@@ -3,6 +3,7 @@
 // to FastAPI — so the JWT stays in its httpOnly cookie (decisions.md §11.5).
 
 import type {
+  AtsCheckResult,
   DashboardData,
   ItemStatus,
   Job,
@@ -135,7 +136,25 @@ export const api = {
 
   // ── Analytics ──
   dashboard: () => request<DashboardData>("/analytics/dashboard"),
+
+  // ── ATS checker (authenticated, persisted) ──
+  runAtsCheck: (resumeId: number) =>
+    request<AtsCheckResult>(`/resumes/${resumeId}/ats-check`, { method: "POST" }),
+  getAtsCheck: (resumeId: number) =>
+    request<AtsCheckResult>(`/resumes/${resumeId}/ats-check`),
 };
+
+/**
+ * Anonymous public ATS check. Goes to a dedicated Next route handler (not the
+ * authenticated proxy) — no account, and the backend stores nothing.
+ */
+export async function anonymousAtsCheck(file: File): Promise<AtsCheckResult> {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch("/api/ats-check", { method: "POST", body: form });
+  if (!response.ok) throw await parseError(response);
+  return (await response.json()) as AtsCheckResult;
+}
 
 /**
  * Stream AI feedback for a match, token by token.

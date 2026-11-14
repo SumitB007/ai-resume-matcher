@@ -1,20 +1,35 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FileText, Loader2, RefreshCw } from "lucide-react";
+import { FileText, Loader2, RefreshCw, ScanSearch } from "lucide-react";
+import { useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 
+import { AtsResultView } from "@/components/ats-result";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/lib/api/client";
+import type { AtsCheckResult } from "@/lib/api/types";
 
 export default function ResumesPage() {
   const queryClient = useQueryClient();
   const resumes = useQuery({ queryKey: ["resumes"], queryFn: api.listResumes });
+
+  const [atsResults, setAtsResults] = useState<Record<number, AtsCheckResult>>({});
+  const [expandedAts, setExpandedAts] = useState<number | null>(null);
+
+  const atsCheck = useMutation({
+    mutationFn: (id: number) => api.runAtsCheck(id),
+    onSuccess: (result, id) => {
+      setAtsResults((current) => ({ ...current, [id]: result }));
+      setExpandedAts(id);
+    },
+    onError: () => toast.error("The ATS check failed. Try again."),
+  });
 
   const reprocess = useMutation({
     mutationFn: (id: number) => api.reprocessResume(id),
@@ -83,6 +98,27 @@ export default function ResumesPage() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => {
+                  if (atsResults[resume.id]) {
+                    setExpandedAts(expandedAts === resume.id ? null : resume.id);
+                  } else {
+                    atsCheck.mutate(resume.id);
+                  }
+                }}
+                disabled={atsCheck.isPending}
+              >
+                {atsCheck.isPending ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ScanSearch className="mr-1.5 h-3.5 w-3.5" />
+                )}
+                {atsResults[resume.id]
+                  ? `ATS ${Math.round(atsResults[resume.id].score)}%`
+                  : "ATS check"}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => reprocess.mutate(resume.id)}
                 disabled={reprocess.isPending}
               >
@@ -94,6 +130,11 @@ export default function ResumesPage() {
                 Reprocess
               </Button>
             </CardContent>
+            {expandedAts === resume.id && atsResults[resume.id] && (
+              <CardContent className="border-t pt-5">
+                <AtsResultView result={atsResults[resume.id]} />
+              </CardContent>
+            )}
           </Card>
         ))}
       </div>
