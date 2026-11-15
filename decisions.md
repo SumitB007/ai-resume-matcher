@@ -469,3 +469,23 @@ This document details every major architectural, technical, library, and impleme
 ### 16.5 Match compare is client-side and job-aware
 **Decision:** Match History lets the user select any two matches; same-job pairs render as a "version story" (score delta, gaps closed / still missing / new gaps from the missing-keyword sets), different-job pairs render side-by-side with an explicit "scores aren't directly comparable" note. PDF re-export per match already existed and stays.
 **Why:** All needed fields are already in the list payload — no new endpoint. The same-job/different-job distinction matters: a delta across different jobs would be a meaningless number presented as progress.
+
+---
+
+## Phase 17 — Growth surface: examples, templates, structured data (2026-11-15)
+
+### 17.1 Examples and template previews render the REAL pipeline
+**Decision:** All public previews are the builder's actual `ResumePreview` rendering hand-written sample `DocumentContent` (`src/lib/sample-data.ts`) — no screenshots, no mock HTML.
+**Why:** What a visitor sees is byte-for-byte what the builder produces; the marketing surface can't drift from the product, and a template change updates every public page automatically. Sample people/companies are fictional and every page labels them "Sample" — illustrative structure, never presented as real users.
+
+### 17.2 Unique content per template, including an honest warning
+**Decision:** Each of the 6 templates gets its own page with hand-written who-it's-for and ATS notes. The Sidebar template's notes state plainly that some legacy ATS parsers mishandle columns and recommend Classic/Modern for "simple resume" postings.
+**Why:** Roadmap §11 demands unique content, not gallery clones — and the honesty is the brand: the same product that refuses to fabricate resume metrics doesn't oversell a two-column layout to people whose target ATS may mangle it.
+
+### 17.3 Role examples start with tech roles, driven by one data file
+**Decision:** Five SSG example pages (backend, frontend, data, DevOps, graduate) generated from `ROLE_EXAMPLES`; each pairs the sample resume with the skills that role is scored on and role-specific tips, plus FAQ structured data. New roles = new entries in one file.
+**Why:** §11 scopes tech roles first (they match the skills dictionary's depth). The scored-on lists come from the same dictionary reality the matcher uses, so the advice and the product agree.
+
+### 17.4 SEO plumbing: sitemap, robots, metadata, JSON-LD
+**Decision:** `sitemap.ts` (all public routes incl. every template/example), `robots.ts` (app/api/print/auth disallowed), `metadataBase` from `NEXT_PUBLIC_SITE_URL`, WebApplication JSON-LD sitewide, FAQ JSON-LD on examples, per-page OpenGraph via `generateMetadata`.
+**Why:** The public pages existed since Phase 1 but nothing told crawlers they exist or kept them out of the app surface. OG images per page are deferred to Phase 8 polish — metadata ships now, artwork later. Blog stays out of scope per §11.

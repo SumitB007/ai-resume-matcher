@@ -531,3 +531,10 @@ Tailoring (read-only endpoint; client applies):
 2. **Analytics** (`/app/analytics`): pick a job → `GET /analytics/resume-progress/{job_id}` (first vs latest dial, improvement, skills gained, timeline); pick a resume → `GET /analytics/resumes/{id}/progress` (avg/high/low + per-job scores).
 3. **Best-fit jobs**: on My Resumes, "Best-fit jobs" expands `GET /resumes/{id}/recommendations` — the user's saved jobs ranked by the same 60/40 blend, with matching/missing skills per job, captioned as a personal shortlist.
 4. **Compare**: in Match History, select two matches → same job = version story (delta + gap diff), different jobs = side-by-side with a comparability note; PDF report download remains per match.
+
+## Flow 16 — Public growth surface (Phase 17)
+
+1. **Discover**: crawlers get `/sitemap.xml` (home, checker, cover letters, templates, examples + every template/example page) and `/robots.txt` keeps them out of `/app`, `/api`, `/print`, auth.
+2. **Templates**: `/templates` gallery renders all six templates live from sample documents → `/templates/[id]` adds who-it's-for + ATS notes → CTA into the builder.
+3. **Examples**: `/examples` → `/examples/[role]` shows a full sample resume in its recommended template, the skills that role is scored on, role-specific tips, and FAQ (visible + JSON-LD) → CTAs to the free ATS checker and the matcher.
+4. **Trust signals**: every sample is labelled fictional; the Sidebar template page warns about legacy ATS column parsing instead of hiding it.

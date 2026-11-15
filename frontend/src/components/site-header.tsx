@@ -1,7 +1,6 @@
 import { FileSearch } from "lucide-react";
 import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -28,10 +27,12 @@ export function SiteHeader() {
           <Link href="/resume-checker" className="hover:text-foreground">
             Resume checker
           </Link>
-          <span className="flex items-center gap-1.5">
+          <Link href="/templates" className="hover:text-foreground">
             Templates
-            <Badge variant="secondary">Soon</Badge>
-          </span>
+          </Link>
+          <Link href="/examples" className="hover:text-foreground">
+            Examples
+          </Link>
           <Link href="/cover-letter" className="hover:text-foreground">
             Cover letters
           </Link>
