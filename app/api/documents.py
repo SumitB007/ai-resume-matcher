@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
 from app.database import get_db
+from app.models.job import JobDescription
 from app.models.resume import Resume
 from app.models.resume_document import ResumeDocument
 from app.models.user import User
@@ -26,9 +27,13 @@ from app.schemas.document import (
     DocumentListItem,
     DocumentResponse,
     DocumentUpdate,
+    TailorRequest,
+    TailorResponse,
 )
 from app.schemas.resume import ResumeResponse
 from app.services.ats_service import run_ats_checks
+from app.services.llm_service import extract_resume_structure
+from app.services.tailoring_service import build_suggestions, score_texts
 from app.services.document_service import flatten_content_to_text, parse_text_to_content
 from app.services.keyword_service import extract_skills
 
@@ -149,8 +154,9 @@ async def import_from_resume(
 ):
     """Create a draft document from an uploaded resume's extracted text.
 
-    Heuristic parse (document_service.parse_text_to_content): always lands as
-    a draft for review in the editor, never silently 'final'."""
+    Extraction: LLM structured parse when available (Phase 15), else the
+    deterministic heuristic parser. Always lands as a draft for review in
+    the editor, never silently 'final'."""
     result = await db.execute(
         select(Resume).where(Resume.id == resume_id, Resume.user_id == current_user.id)
     )
@@ -159,7 +165,12 @@ async def import_from_resume(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Resume not found"
         )
-    content = parse_text_to_content(resume.raw_text)
+    # Phase 15 upgrade (§13.4): LLM structured extraction when a key is
+    # configured and its output validates; the deterministic heuristic
+    # parser remains the fallback. Either way it lands as a draft.
+    content = await extract_resume_structure(resume.raw_text) or parse_text_to_content(
+        resume.raw_text
+    )
     document = ResumeDocument(
         user_id=current_user.id,
         title=(resume.file_name or "Imported resume").rsplit(".", 1)[0],
@@ -258,4 +269,53 @@ async def document_ats_check(
         word_count=result["word_count"],
         skills_found=result["skills_found"],
         created_at=None,
+    )
+
+
+@router.post("/{document_id}/tailor", response_model=TailorResponse, summary="Score a document against a job and get per-change tailoring suggestions")
+async def tailor_document(
+    document_id: int,
+    payload: TailorRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Phase 15 (§9.2): matcher-identical scores for the document's flattened
+    text + a suggestion list. Read-only — applying suggestions is the
+    client's job (on a duplicate, by default), one change at a time."""
+    document = await _get_owned_document(db, document_id, current_user)
+
+    job_text = payload.job_text or ""
+    job_title = payload.job_title or ""
+    if payload.job_id:
+        result = await db.execute(
+            select(JobDescription).where(
+                JobDescription.id == payload.job_id,
+                JobDescription.user_id == current_user.id,
+            )
+        )
+        job = result.scalar_one_or_none()
+        if job is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Job not found")
+        job_text = job.raw_text
+        job_title = job.title or job_title
+    if len(job_text.strip()) < 30:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide job_id or job_text (at least a short description)",
+        )
+
+    flat = flatten_content_to_text(document.content)
+    scores = score_texts(flat, job_text)
+    built = await build_suggestions(
+        content=document.content,
+        missing_keywords=scores["missing_keywords"],
+        job_text=job_text,
+        job_title=job_title,
+        model=payload.model,
+    )
+    return TailorResponse(
+        **scores,
+        suggestions=built["suggestions"],
+        model_used=built["model_used"],
+        fallback_used=built["fallback_used"],
     )

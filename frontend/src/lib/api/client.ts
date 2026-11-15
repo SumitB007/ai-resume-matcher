@@ -18,6 +18,9 @@ import type {
   DocTheme,
   DocumentContent,
   LetterContent,
+  SkillGroupOut,
+  SummaryVariant,
+  TailorResult,
   User,
 } from "./types";
 
@@ -174,6 +177,41 @@ export const api = {
     request<Resume>(`/documents/${id}/sync-resume`, { method: "POST" }),
   documentAtsCheck: (id: number) =>
     request<AtsCheckResult>(`/documents/${id}/ats-check`, { method: "POST" }),
+
+  // ── Phase 15: generators + tailoring ──
+  generateSummary: (body: {
+    title?: string;
+    years_experience?: string;
+    skills?: string[];
+    target_role?: string;
+  }) =>
+    request<{ variants: SummaryVariant[]; model_used: string; fallback_used: boolean }>(
+      "/ai/generate-summary",
+      jsonInit("POST", body),
+    ),
+  generateBullets: (body: { role?: string; company?: string; notes: string }) =>
+    request<{ bullets: string[]; model_used: string; fallback_used: boolean }>(
+      "/ai/generate-bullets",
+      jsonInit("POST", body),
+    ),
+  suggestSkills: (text: string) =>
+    request<{
+      groups: SkillGroupOut[];
+      skills: string[];
+      model_used: string;
+      fallback_used: boolean;
+    }>("/ai/suggest-skills", jsonInit("POST", { text })),
+  generateResumeDraft: (body: { title: string; level: string; skills: string }) =>
+    request<{
+      content: DocumentContent;
+      summary_variants: SummaryVariant[];
+      model_used: string;
+      fallback_used: boolean;
+    }>("/ai/generate-resume-draft", jsonInit("POST", body)),
+  tailorDocument: (
+    id: number,
+    body: { job_id?: number; job_text?: string; job_title?: string },
+  ) => request<TailorResult>(`/documents/${id}/tailor`, jsonInit("POST", body)),
 
   // ── Cover letters ──
   listCoverLetters: () => request<CoverLetterListItem[]>("/cover-letters"),

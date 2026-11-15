@@ -501,3 +501,26 @@ Print/PDF: editor ──▶ /print/cover-letters/[id] ──▶ browser Save-as-
 Stateless variant: POST /ai/cover-letter (text in → paragraphs out, nothing saved)
 CRUD/duplicate: /cover-letters mirrors /documents
 ```
+
+## Flow 14 — AI generators + tailoring (Phase 15)
+
+```
+Generators (all: LLM → validated → deterministic fallback; §15.1 numbers guard on bullets):
+  POST /ai/generate-summary   {title, years, skills, target} ─▶ 3 variants ─▶ editor pick-to-insert
+  POST /ai/generate-bullets   {role, company, notes} ─▶ X-Y-Z bullets (numbers ⊆ notes)
+  POST /ai/suggest-skills     {text} ─▶ extract_skills_llm ─▶ group_skills_by_category (deterministic)
+  POST /ai/generate-resume-draft {title, level, skills} ─▶ document skeleton ({label, items} shape)
+  Import upgrade: POST /documents/import-from-resume/{id}
+      ─▶ extract_resume_structure (LLM, shape-validated) OR parse_text_to_content (heuristic floor)
+
+Tailoring (read-only endpoint; client applies):
+  editor "Tailor to a job" ─▶ duplicate doc ("— tailored for {Company}") ─▶ switch editor to copy
+    ─▶ POST /documents/{copy_id}/tailor {job_id | job_text}
+         score_texts: embeddings cosine ×0.6 + keyword overlap ×0.4 (matcher math, Flow 2)
+         suggestions: add_skill (dictionary diff, category-tagged)
+                    + rewrite_bullet (weak-bullet heuristic → rewrite_bullet_point)
+                    + summary variant
+    ─▶ per-row Accept (applies to copy via editor store, autosaves) / Skip (no penalty)
+    ─▶ Re-check score: save flush ─▶ tailor again ─▶ live score for the copy
+    ─▶ Sync to matcher (Flow 12) makes it a scored match in history
+```

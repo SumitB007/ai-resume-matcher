@@ -408,3 +408,35 @@ This document details every major architectural, technical, library, and impleme
 ### 14.5 Editor state stays local; samples are marketing, not data
 **Decision:** The letter editor uses local state + the same 1.2 s debounced autosave as the builder, not a second Zustand store. The public `/cover-letter` page renders three hand-written sample letters (tech roles first) through the real `LetterPreview`.
 **Why:** Zustand was justified by the builder's deeply nested tree; a letter is a flat form, and a second store would be ceremony. Rendering samples with the production component guarantees the gallery shows exactly what users get.
+
+---
+
+## Phase 15 — AI generator + one-click tailoring (2026-11-15)
+
+### 15.1 The no-fabrication rule is enforced in code, not just in prompts
+**Decision:** Every generator ships a deterministic fallback AND a guard: `_numbers_guard` drops any generated bullet containing a number absent from the user's source notes (if too few survive, the fallback replaces the whole set). Prompts state the rule; the code enforces it; a unit test pins it.
+**Why:** "AI must not fabricate experience" (roadmap §9.2 guardrail) cannot rest on prompt politeness — models invent metrics enthusiastically. Numbers are the highest-risk fabrication in resumes and the easiest to check mechanically: the user supplies facts, the AI supplies form, and any number the user didn't state is definitionally invented.
+
+### 15.2 Fallbacks are formatters, not fakers
+**Decision:** The bullet fallback restructures the user's own sentences (prefix mapping: "responsible for" → "Owned", "worked on" → "Developed"), the summary fallback composes three labelled variants from title/years/skills only, and the draft generator leaves experience as an empty skeleton carrying just the target role.
+**Why:** Consistent with Phase 14's structured fallback: degraded-but-honest beats blocked. A fallback that invented a plausible history would violate §15.1 worse than no fallback at all.
+
+### 15.3 Skill grouping is deterministic; the LLM only extracts
+**Decision:** `suggest_skill_groups` composes the existing `extract_skills_llm` (LLM extraction, dictionary fallback) with a static category map in `keyword_service` (`group_skills_by_category`). The suggest response shape is `{name, skills}`; document content keeps its Phase 13 shape `{label, items}` and the draft generator converts between them.
+**Why:** The roadmap requires suggestions "intersected with the dictionary" — extraction may be LLM-assisted, but the *set* of suggestible skills and their grouping must be stable and identical everywhere (suggester, tailor, ATS all read the same dictionary). A category map is boring, testable, and never hallucinates a grouping.
+
+### 15.4 Tailoring scores with the matcher's own math, on raw texts
+**Decision:** `tailoring_service.score_texts` composes `generate_embedding` + cosine with `compute_keyword_overlap` / `find_missing_keywords` and the same 0.6/0.4 blend — no Resume/Job rows required, nothing persisted. `POST /documents/{id}/tailor` is read-only: it returns scores + suggestions; applying them is the client's job.
+**Why:** A document being tailored usually has no synced Resume row yet, and its content changes with every accepted suggestion — persisted match rows would be stale on arrival. Reusing the matcher's exact functions (not a reimplementation) means the tailor score and the matcher score can never drift apart; when the user syncs the tailored copy, the matcher reproduces the same number.
+
+### 15.5 Suggestions are proposals; the copy is the default; skipping is free
+**Decision:** Three suggestion types — `add_skill` (from the dictionary diff, tagged with its category), `rewrite_bullet` (weakest bullets by a deterministic heuristic: unquantified + short or weak-opener, capped at 4, via the existing rewriter), `summary` (a tailored variant). The UI duplicates the document first ("… — tailored for {Company}"), switches to the copy, and applies accepted changes locally; every row is accept/skip individually, and skip copy carries no penalty language.
+**Why:** Roadmap §9.2's core design: nothing auto-overwrites, the master stays intact, and a missing keyword the user doesn't actually have must be skippable without guilt — otherwise the tool trains users to lie on their resumes. Weakness heuristics stay deterministic so "why was this flagged" always has an answer.
+
+### 15.6 Import extraction upgrades to LLM-with-validation, heuristic underneath
+**Decision:** `import-from-resume` now tries `extract_resume_structure` (LLM JSON coerced onto `EMPTY_CONTENT`'s shape; requires a name or an experience entry to count as success) and falls back to the Phase 13 heuristic parser on any failure or missing key.
+**Why:** §13.4 always planned this upgrade; the heuristic parser's heading/ regex approach mangles real-world resumes in ways an LLM doesn't. Keeping the heuristic as the floor means import never gets *worse* than Phase 13 — the LLM path must validate its way in.
+
+### 15.7 Tailor rewrites are gated twice — and a pre-existing fabrication issue, flagged
+**Decision:** Rewriter output passes `_extract_single_bullet` (a suggestion must be one drop-in bullet, not the rewriter's multi-variation document) and then `_numbers_guard` against the original bullet + the whole document's numbers. A rewrite that introduces any new number is dropped entirely.
+**Why:** Live verification caught the existing offline fallback rewriter inventing metrics wholesale ("42% latency reduction", "99.98% uptime") for a bullet that stated none. In the matcher's feedback panel that text reads as illustrative; as a one-click *replacement on the user's actual resume* it would be fabrication — exactly what §15.1 exists to prevent. Consequence, accepted: with no LLM key, tailoring offers add-skill and summary suggestions but usually no bullet rewrites, rather than dishonest ones. **Pre-existing issue noted for Sumit's call:** the original `_generate_local_fallback` (Phases 1–10 code) fabricates metrics in match feedback too; gating *that* surface changes the original product's behaviour and is out of Phase 5 scope — flagged in PR #5, not silently rewritten.

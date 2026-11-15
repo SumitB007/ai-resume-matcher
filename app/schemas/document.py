@@ -63,3 +63,34 @@ class DocumentListItem(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class TailorRequest(BaseModel):
+    """Tailor a document to a saved job or pasted JD text (Phase 15)."""
+
+    job_id: int | None = None
+    job_text: str | None = None
+    job_title: str | None = None
+    model: str | None = None
+
+
+class TailorSuggestion(BaseModel):
+    id: str
+    type: str  # add_skill | rewrite_bullet | summary
+    skill: str | None = None
+    group: str | None = None
+    experience_index: int | None = None
+    bullet_index: int | None = None
+    original: str = ""
+    proposed: str = ""
+
+
+class TailorResponse(BaseModel):
+    overall_score: float
+    similarity_score: float
+    keyword_score: float
+    matched_keywords: list[str]
+    missing_keywords: list[str]
+    suggestions: list[TailorSuggestion]
+    model_used: str
+    fallback_used: bool
