@@ -524,3 +524,10 @@ Tailoring (read-only endpoint; client applies):
     ─▶ Re-check score: save flush ─▶ tailor again ─▶ live score for the copy
     ─▶ Sync to matcher (Flow 12) makes it a scored match in history
 ```
+
+## Flow 15 — Analytics, recommendations, compare (Phase 16)
+
+1. **Dashboard** (`/app`): totals + best score → v2 adds average/lowest, ranked missing-skill bars (prevalence across matches), proven-skills panel, recent matches with dates — all from `GET /analytics/dashboard`.
+2. **Analytics** (`/app/analytics`): pick a job → `GET /analytics/resume-progress/{job_id}` (first vs latest dial, improvement, skills gained, timeline); pick a resume → `GET /analytics/resumes/{id}/progress` (avg/high/low + per-job scores).
+3. **Best-fit jobs**: on My Resumes, "Best-fit jobs" expands `GET /resumes/{id}/recommendations` — the user's saved jobs ranked by the same 60/40 blend, with matching/missing skills per job, captioned as a personal shortlist.
+4. **Compare**: in Match History, select two matches → same job = version story (delta + gap diff), different jobs = side-by-side with a comparability note; PDF report download remains per match.

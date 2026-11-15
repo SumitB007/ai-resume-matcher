@@ -445,3 +445,27 @@ This document details every major architectural, technical, library, and impleme
 **Decision:** `_generate_local_fallback` was rewritten wholesale. Both branches (bullet rewrite, match feedback) are now assembled from facts extracted out of the prompt itself — the user's own bullet, their real overall score, the dictionary-verified matched skills, and the real missing skills — with `[add your metric]` placeholders wherever a number would strengthen the text. A bullet that already carries its own metric gets no placeholder appended. The feedback now ends with an explicit "Offline mode … no AI model was involved" disclosure. The generic branch returns the honest X-Y-Z template instead of prose.
 **Why:** Sumit picked B over gating (A) on 2026-11-15: keep the fallback useful, make it truthful. The old canned text stated invented metrics (42% latency, 99.98% uptime, 15,000 req/min) about every user; the new one cannot state a number the prompt didn't contain — pinned by `tests/test_fallback_honesty.py` (invented values asserted absent by name; output numbers ⊆ prompt numbers). Live-verified: rewrite of "Responsible for building REST APIs" → "Built REST APIs, measured by [add your metric …]"; match feedback cites the real 75.85 score, the real matched set, and the user's own bullets verbatim.
 **Also in this PR:** the bullet prefix map learned verb preservation ("Responsible for building X" → "Built X", "was responsible for leading Y" → "Led Y") via a small past-tense table — the old map produced "Owned building X".
+
+---
+
+## Phase 16 — Dashboard, analytics, recommendations frontend (2026-11-15)
+
+### 16.1 Frontend-only phase, by design
+**Decision:** No backend changes. The three analytics endpoints and the recommendations endpoint shipped in the original backend (Phases 1–10) and were verified live before building against them; response shapes were read from `app/schemas/analytics.py` / `recommendation.py`, not assumed.
+**Why:** The roadmap scoped Phase 6 as "frontend for what already exists". Building UI against schema-verified contracts keeps the phase small and the backend untouched.
+
+### 16.2 Dashboard v2 shows distributions, not just totals
+**Decision:** The dashboard gains an average/best/lowest strip, top missing skills as ranked bars (percentage of matches missing each), and a top-candidate-skills panel; recent matches gain dates and missing-counts.
+**Why:** v1 showed totals and badge clouds. The actionable questions are "what do jobs keep asking for that I lack" (ranked, with prevalence) and "what do I provably have" — bars and ranked lists answer them at a glance.
+
+### 16.3 Analytics page = two stories, both about iteration
+**Decision:** `/app/analytics` holds (a) per-job progress — first vs latest ScoreDial, improvement badge, skills-gained chips, full timeline; (b) per-resume summary across jobs — avg/high/low plus a per-job list.
+**Why:** The product loop is match → improve → re-match; the analytics surface exists to make that loop's payoff visible. Both views reuse the backend's own computations (skills_gained is computed server-side from early-vs-late missing sets), so the UI never re-derives numbers differently from the API.
+
+### 16.4 Recommendations framed as "your saved jobs, ranked"
+**Decision:** The resumes page gains a per-resume "Best-fit jobs" panel using `/resumes/{id}/recommendations`, captioned explicitly: ranked from jobs you've saved — your own shortlist, not a job board.
+**Why:** The catalogue is the user's own job descriptions (pgvector similarity over them). Presenting it as external job discovery would be dishonest about what the data is; as a shortlist ranker it's genuinely useful (which of my target roles fits this resume best, and what's missing for each).
+
+### 16.5 Match compare is client-side and job-aware
+**Decision:** Match History lets the user select any two matches; same-job pairs render as a "version story" (score delta, gaps closed / still missing / new gaps from the missing-keyword sets), different-job pairs render side-by-side with an explicit "scores aren't directly comparable" note. PDF re-export per match already existed and stays.
+**Why:** All needed fields are already in the list payload — no new endpoint. The same-job/different-job distinction matters: a delta across different jobs would be a meaningless number presented as progress.
