@@ -10,6 +10,7 @@ import {
   FilePen,
   FileText,
   History,
+  TrendingUp,
   Mail,
   LayoutDashboard,
   Loader2,
@@ -28,6 +29,7 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/app", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/app/analytics", label: "Analytics", icon: TrendingUp, exact: false },
   { href: "/app/match", label: "Job Matcher", icon: ScanSearch, exact: false },
   { href: "/app/resumes", label: "My Resumes", icon: FileText, exact: false },
   { href: "/app/builder", label: "Resume Builder", icon: FilePen, exact: false },

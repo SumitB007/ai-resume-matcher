@@ -7,6 +7,9 @@ import type {
   CoverLetter,
   CoverLetterListItem,
   DashboardData,
+  JobRecommendations,
+  ResumeEvaluationsSummary,
+  ResumeProgress,
   ItemStatus,
   Job,
   Match,
@@ -146,6 +149,12 @@ export const api = {
 
   // ── Analytics ──
   dashboard: () => request<DashboardData>("/analytics/dashboard"),
+  resumeProgress: (jobId: number) =>
+    request<ResumeProgress>(`/analytics/resume-progress/${jobId}`),
+  resumeEvaluations: (resumeId: number) =>
+    request<ResumeEvaluationsSummary>(`/analytics/resumes/${resumeId}/progress`),
+  resumeRecommendations: (resumeId: number, limit = 5) =>
+    request<JobRecommendations>(`/resumes/${resumeId}/recommendations?limit=${limit}`),
 
   // ── Builder documents ──
   listDocuments: () => request<ResumeDocumentListItem[]>("/documents"),

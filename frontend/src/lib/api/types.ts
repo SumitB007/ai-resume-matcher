@@ -89,6 +89,69 @@ export interface SkillFrequency {
   percentage: number;
 }
 
+// ── Phase 6: analytics + recommendations ──
+export interface TimelineEntry {
+  match_id: number;
+  resume_id: number;
+  resume_file_name: string | null;
+  overall_score: number;
+  similarity_score: number | null;
+  keyword_score: number | null;
+  missing_keywords: string[] | null;
+  created_at: string;
+}
+
+export interface ResumeProgress {
+  job_id: number;
+  job_title: string | null;
+  job_company: string | null;
+  total_evaluations: number;
+  initial_score: number | null;
+  latest_score: number | null;
+  score_improvement: number | null;
+  average_score: number | null;
+  skills_gained: string[];
+  timeline: TimelineEntry[];
+}
+
+export interface ResumeEvaluationsSummary {
+  resume_id: number;
+  resume_file_name: string | null;
+  total_jobs_matched: number;
+  average_score: number | null;
+  highest_score: number | null;
+  lowest_score: number | null;
+  matches: Array<{
+    job_id: number;
+    job_title: string | null;
+    job_company: string | null;
+    overall_score: number;
+    similarity_score: number | null;
+    keyword_score: number | null;
+    created_at: string;
+  }>;
+}
+
+export interface JobRecommendationItem {
+  job_id: number;
+  title: string | null;
+  company: string | null;
+  similarity_score: number;
+  keyword_score: number;
+  overall_score: number;
+  matching_skills: string[];
+  missing_skills: string[];
+  created_at: string;
+}
+
+export interface JobRecommendations {
+  resume_id: number;
+  resume_file_name: string | null;
+  total_jobs_evaluated: number;
+  returned_count: number;
+  recommendations: JobRecommendationItem[];
+}
+
 export interface DashboardData {
   total_resumes: number;
   total_jobs: number;

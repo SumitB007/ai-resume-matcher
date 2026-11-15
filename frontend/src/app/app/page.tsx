@@ -114,33 +114,98 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">
-                    Skills jobs keep asking for (and you&apos;re missing)
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {data.top_missing_skills.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No recurring gaps — nice work.
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {data.top_missing_skills.map((skill) => (
-                        <Badge key={skill.skill} variant="secondary">
-                          {skill.skill} · {skill.count}×
-                        </Badge>
-                      ))}
+            <>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold">
+                      {data.average_match_score != null ? `${Math.round(data.average_match_score)}%` : "—"}
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                    <div className="text-sm text-muted-foreground">Average score</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold">
+                      {data.highest_match_score != null ? `${Math.round(data.highest_match_score)}%` : "—"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Best score</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-2xl font-bold">
+                      {data.lowest_match_score != null ? `${Math.round(data.lowest_match_score)}%` : "—"}
+                    </div>
+                    <div className="text-sm text-muted-foreground">Lowest score — the one to fix first</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">
+                      Skills jobs keep asking for (and you&apos;re missing)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {data.top_missing_skills.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No recurring gaps — nice work.
+                      </p>
+                    ) : (
+                      data.top_missing_skills.slice(0, 8).map((skill) => (
+                        <div key={skill.skill} className="space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium">{skill.skill}</span>
+                            <span className="text-muted-foreground">
+                              missing in {Math.round(skill.percentage)}% of matches · {skill.count}×
+                            </span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-red-100">
+                            <div
+                              className="h-full rounded-full bg-red-500"
+                              style={{ width: `${Math.min(100, skill.percentage)}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Skills your resumes evidence most</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {data.top_candidate_skills.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">
+                        No skills parsed yet — upload a resume to start.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {data.top_candidate_skills.slice(0, 14).map((skill) => (
+                          <Badge key={skill.skill} variant="secondary" className="bg-emerald-50 text-emerald-900">
+                            {skill.skill} · {skill.count}×
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    <p className="mt-4 text-xs text-muted-foreground">
+                      These are dictionary-verified from your uploaded resumes — your proven shelf.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
 
               <Card>
-                <CardHeader>
+                <CardHeader className="flex flex-row items-center justify-between">
                   <CardTitle className="text-base">Recent matches</CardTitle>
+                  <Link href="/app/analytics" className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                    See progress analytics
+                  </Link>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {data.recent_matches.map((match) => (
@@ -148,8 +213,14 @@ export default function DashboardPage() {
                       key={match.match_id}
                       className="flex items-center justify-between gap-3 text-sm"
                     >
-                      <span className="truncate">
-                        {match.resume_file_name ?? `Resume #${match.resume_id}`}
+                      <span className="min-w-0">
+                        <span className="block truncate">
+                          {match.resume_file_name ?? `Resume #${match.resume_id}`}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(match.created_at).toLocaleDateString()} ·{" "}
+                          {(match.missing_keywords ?? []).length} missing skills
+                        </span>
                       </span>
                       <Badge variant={match.overall_score >= 75 ? "default" : "secondary"}>
                         {Math.round(match.overall_score)}%
@@ -161,7 +232,7 @@ export default function DashboardPage() {
                   </Link>
                 </CardContent>
               </Card>
-            </div>
+            </>
           )}
         </>
       )}
