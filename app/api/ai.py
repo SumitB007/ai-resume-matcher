@@ -14,11 +14,13 @@ from app.schemas.llm import (
     LLMSkillExtractionResponse,
     ModelListResponse,
 )
+from app.schemas.cover_letter import AiCoverLetterRequest, AiCoverLetterResponse
 from app.services.llm_service import (
     call_openrouter,
     stream_openrouter,
     rewrite_bullet_point,
     extract_skills_llm,
+    generate_cover_letter,
 )
 
 logger = logging.getLogger(__name__)
@@ -139,3 +141,29 @@ async def stream_ai_generation(
 
     import json
     return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+
+@router.post(
+    "/cover-letter",
+    response_model=AiCoverLetterResponse,
+    summary="Generate cover letter paragraphs from resume + job text (stateless)",
+)
+async def cover_letter(
+    payload: AiCoverLetterRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Stateless generation (roadmap §8). To get a saved, editable letter in
+    one step, use POST /cover-letters/generate instead."""
+    result = await generate_cover_letter(
+        resume_text=payload.resume_text,
+        job_text=payload.job_text,
+        job_title=payload.job_title,
+        company=payload.company,
+        tone=payload.tone,
+        model=payload.model,
+    )
+    return AiCoverLetterResponse(
+        paragraphs=result["paragraphs"],
+        model_used=result["model_used"],
+        fallback_used=result["fallback_used"],
+    )

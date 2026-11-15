@@ -10,6 +10,7 @@ import {
   FilePen,
   FileText,
   History,
+  Mail,
   LayoutDashboard,
   Loader2,
   LogOut,
@@ -30,6 +31,7 @@ const navItems = [
   { href: "/app/match", label: "Job Matcher", icon: ScanSearch, exact: false },
   { href: "/app/resumes", label: "My Resumes", icon: FileText, exact: false },
   { href: "/app/builder", label: "Resume Builder", icon: FilePen, exact: false },
+  { href: "/app/cover-letters", label: "Cover Letters", icon: Mail, exact: false },
   { href: "/app/jobs", label: "Saved Jobs", icon: Briefcase, exact: false },
   { href: "/app/matches", label: "Match History", icon: History, exact: false },
 ];

@@ -32,10 +32,9 @@ export function SiteHeader() {
             Templates
             <Badge variant="secondary">Soon</Badge>
           </span>
-          <span className="flex items-center gap-1.5">
+          <Link href="/cover-letter" className="hover:text-foreground">
             Cover letters
-            <Badge variant="secondary">Soon</Badge>
-          </span>
+          </Link>
         </nav>
         <div className="flex items-center gap-2">
           <Link href="/login" className={buttonVariants({ variant: "ghost" })}>

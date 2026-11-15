@@ -72,6 +72,7 @@ const roadmapItems = [
   {
     title: "Cover letters",
     text: "Matching cover letter templates and an AI generator that writes from your resume and the job.",
+    live: true,
   },
   {
     title: "One-click tailoring",

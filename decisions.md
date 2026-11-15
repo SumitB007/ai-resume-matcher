@@ -384,3 +384,27 @@ This document details every major architectural, technical, library, and impleme
 ### 13.7 Dependency Fix Found by the First Fresh Install: psycopg v3
 * **Decision:** Added `psycopg[binary]` to `requirements.txt` (psycopg2-binary kept).
 * **Rationale:** A fresh `pip install` today resolves the unpinned `sqlalchemy[asyncio]` to **SQLAlchemy 2.1**, whose default `postgresql://` *sync* dialect is psycopg v3 — but requirements only shipped psycopg2, so `app/database.py`'s sync engine crashed at import (`ModuleNotFoundError: No module named 'psycopg'`) and Alembic could not run at all. Existing installs on SQLAlchemy 2.0 never saw it (2.0 defaults to psycopg2). Adding the v3 driver fixes fresh installs without disturbing existing ones; pinning SQLAlchemy back would only freeze the problem. Found during the first full native bring-up of the backend in the dev environment (Postgres 16 + pgvector 0.8 + Redis, all migrations applied including Phases 12–13).
+
+---
+
+## Phase 14 — Cover letters: the second document product (2026-11-14)
+
+### 14.1 Same document pattern, second product — no new machinery invented
+**Decision:** `cover_letters` mirrors `resume_documents`: title, `template_id`, theme JSON, content JSON, plus nullable links (`resume_id`, `resume_document_id`, `job_id`) recording what the letter was made for. CRUD + duplicate endpoints mirror the documents API.
+**Why:** Roadmap §8's premise — Phase 4 is small precisely because Phase 3's pattern (model shape, editor pattern, print pipeline, template ids) is reused wholesale. The links are provenance ("generated from this match"), not live joins: a letter must stay stable even if its source resume or job is later deleted or reprocessed.
+
+### 14.2 The six template ids, adapted to letters — matching is the feature
+**Decision:** Letters use the same six template ids and theme knobs as resumes; `LetterPreview` adapts each identity to a letter layout (the sidebar identity becomes a contact rail). The editor nudges users to keep template + accent in step with their resume.
+**Why:** The behaviour users value from the reference product is a resume and letter that read as one application. Sharing ids makes "matching" the default state rather than a feature to build, and keeps one theme vocabulary across the app.
+
+### 14.3 Generation is grounded and honest — the fallback is a real letter
+**Decision:** `llm_service.generate_cover_letter` asks the LLM for body paragraphs only (greeting/sign-off are structural fields), then validates the output (≥3 substantial paragraphs); on no-key, API failure, or unusable output it uses `_structured_fallback_letter` — a deterministic letter assembled from extracted facts: name/title/years from the resume, matched skills from the real dictionary intersection with the JD, and missing skills framed as *actively building depth*, never as experience. Three tones (professional / enthusiastic / concise) vary both paths.
+**Why:** The product's core honesty rule (Phase 5 states it for bullets; it applies here first): AI must not fabricate experience. A template fallback that only recombines verified facts keeps the no-key experience fully functional — verified live: with no usable LLM the fallback produced a complete, specific 4-paragraph letter. Splitting greeting/closing out of generation keeps structure editable and stops the classic LLM failure of embedding `[Your Name]` placeholders in the body.
+
+### 14.4 Two generation endpoints, one service
+**Decision:** `POST /ai/cover-letter` is stateless (the roadmap §8 contract, consistent with the other `/ai` endpoints); `POST /cover-letters/generate` resolves owned sources — an upload, or a built document flattened from its *current* content — generates via the same service, and persists the letter, returning it so the UI can open the editor directly.
+**Why:** The acceptance criterion is "from a match result, one click creates a draft" — that needs server-side source resolution and persistence in one call. The stateless endpoint stays for API parity and future surfaces. Resolving a document by flattening its current content (not its last sync) matters: a letter should reflect the resume as it is now.
+
+### 14.5 Editor state stays local; samples are marketing, not data
+**Decision:** The letter editor uses local state + the same 1.2 s debounced autosave as the builder, not a second Zustand store. The public `/cover-letter` page renders three hand-written sample letters (tech roles first) through the real `LetterPreview`.
+**Why:** Zustand was justified by the builder's deeply nested tree; a letter is a flat form, and a second store would be ceremony. Rendering samples with the production component guarantees the gallery shows exactly what users get.

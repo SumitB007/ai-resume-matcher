@@ -479,3 +479,25 @@ Anonymous path (public /resume-checker page):
 | **`app/api/documents.py`** | CRUD, `duplicate`, `import_from_resume`, `sync_resume`, `document_ats_check` | Builder UI via BFF proxy | `document_service`, `ats_service`, `keyword_service`, Celery `process_resume_task`, `cache_service` |
 | **`frontend/src/lib/store/editor-store.ts`** | Editor document tree + dirty/saving state | Builder editor page | TanStack Query data (init), API client (autosave) |
 | **`frontend/src/components/resume-preview.tsx`** | 6 template layouts, `A4Page` frame | Editor preview, print route | Document content + theme |
+
+## Flow 13 — Cover letters (Phase 14)
+
+```
+Generate (one click, e.g. from a match result):
+  matcher result / letters page ──▶ POST /cover-letters/generate
+    {resume_id | resume_document_id} + {job_id | job_text} + tone
+      ├─ resolve owned resume (upload raw_text, or document flattened NOW per Flow 12)
+      ├─ resolve owned job (saved row or pasted text) → title/company
+      └─ llm_service.generate_cover_letter()
+            ├─ LLM path: paragraphs-only prompt → validate shape
+            └─ fallback: _structured_fallback_letter (extracted facts,
+               matched skills = dictionary ∩, missing skills = honest bridge)
+      ──▶ CoverLetter row (content incl. greeting/closing/date, source links)
+      ──▶ editor opens
+
+Edit/autosave: /app/cover-letters/[id] ──(1.2s debounce)──▶ PUT /cover-letters/{id}
+Templates/theme: LetterPreview (6 ids shared with resumes) in editor + print
+Print/PDF: editor ──▶ /print/cover-letters/[id] ──▶ browser Save-as-PDF (per §13.5)
+Stateless variant: POST /ai/cover-letter (text in → paragraphs out, nothing saved)
+CRUD/duplicate: /cover-letters mirrors /documents
+```
