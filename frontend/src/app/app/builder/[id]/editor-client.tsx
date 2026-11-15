@@ -11,6 +11,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Crosshair,
   CheckCircle2,
   FileDown,
   Loader2,
@@ -25,6 +26,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { AtsResultView } from "@/components/ats-result";
+import { BulletsAssist, SummaryAssist } from "./ai-assist";
+import { TailorPanel } from "./tailor-panel";
 import { A4Page, ResumePreview } from "@/components/resume-preview";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -178,6 +181,7 @@ export default function BuilderEditorPage() {
 
   const [atsResult, setAtsResult] = useState<AtsCheckResult | null>(null);
   const [showAts, setShowAts] = useState(false);
+  const [tailorOpen, setTailorOpen] = useState(false);
   const initialisedFor = useRef<number | null>(null);
 
   const docQuery = useQuery({
@@ -286,6 +290,9 @@ export default function BuilderEditorPage() {
             {syncMutation.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1.5 h-4 w-4" />}
             {doc.resume_id ? "Re-sync to matcher" : "Sync to matcher"}
           </Button>
+          <Button variant="outline" size="sm" onClick={() => setTailorOpen((v) => !v)}>
+            <Crosshair className="mr-1.5 h-4 w-4" /> Tailor to a job
+          </Button>
           <Button
             size="sm"
             className="bg-blue-700 hover:bg-blue-800"
@@ -295,6 +302,8 @@ export default function BuilderEditorPage() {
           </Button>
         </div>
       </div>
+
+      {tailorOpen && <TailorPanel onClose={() => setTailorOpen(false)} />}
 
       {doc.resume_id && (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -387,6 +396,13 @@ export default function BuilderEditorPage() {
             <CardHeader className="pb-3"><CardTitle className="text-base">Summary</CardTitle></CardHeader>
             <CardContent>
               <Textarea value={c.summary} onChange={(e) => updateContent((d) => { d.summary = e.target.value; })} rows={4} placeholder="2–3 lines: who you are, strongest skills, what you're targeting." />
+              <div className="mt-3">
+                <SummaryAssist
+                  title={c.personal.title}
+                  skills={c.skills.groups.flatMap((g) => g.items)}
+                  onPick={(text) => updateContent((d) => { d.summary = text; })}
+                />
+              </div>
             </CardContent>
           </Card>
 
@@ -415,6 +431,7 @@ export default function BuilderEditorPage() {
                     I currently work here
                   </label>
                   <LinesField label="Bullets (one per line)" items={job.bullets} onChange={(v) => updateContent((d) => { d.experience[i].bullets = v; })} placeholder={"Built a FastAPI platform serving 2M requests/day"} hint="Start with an action verb and add numbers wherever they're true." />
+                  <BulletsAssist role={job.role} company={job.company} onAdd={(newBullets) => updateContent((d) => { d.experience[i].bullets.push(...newBullets); })} />
                 </div>
               ))}
               {c.experience.length === 0 && <p className="text-sm text-muted-foreground">No roles yet — add your most recent one.</p>}

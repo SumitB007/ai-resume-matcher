@@ -15,12 +15,26 @@ from app.schemas.llm import (
     ModelListResponse,
 )
 from app.schemas.cover_letter import AiCoverLetterRequest, AiCoverLetterResponse
+from app.schemas.generator import (
+    BulletsGenerateRequest,
+    BulletsGenerateResponse,
+    ResumeDraftRequest,
+    ResumeDraftResponse,
+    SuggestSkillsRequest,
+    SuggestSkillsResponse,
+    SummaryGenerateRequest,
+    SummaryGenerateResponse,
+)
 from app.services.llm_service import (
     call_openrouter,
     stream_openrouter,
     rewrite_bullet_point,
     extract_skills_llm,
     generate_cover_letter,
+    generate_bullets,
+    generate_resume_draft,
+    generate_summary_variants,
+    suggest_skill_groups,
 )
 
 logger = logging.getLogger(__name__)
@@ -167,3 +181,71 @@ async def cover_letter(
         model_used=result["model_used"],
         fallback_used=result["fallback_used"],
     )
+
+
+@router.post(
+    "/generate-summary",
+    response_model=SummaryGenerateResponse,
+    summary="Generate 3 professional summary variants (pick-to-insert)",
+)
+async def generate_summary(
+    payload: SummaryGenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    result = await generate_summary_variants(
+        title=payload.title,
+        years=payload.years_experience,
+        skills=payload.skills,
+        target_role=payload.target_role,
+        model=payload.model,
+    )
+    return SummaryGenerateResponse(**result)
+
+
+@router.post(
+    "/generate-bullets",
+    response_model=BulletsGenerateResponse,
+    summary="Turn rough notes into achievement bullets (facts are the user's; form is the AI's)",
+)
+async def generate_bullets_endpoint(
+    payload: BulletsGenerateRequest,
+    current_user: User = Depends(get_current_user),
+):
+    result = await generate_bullets(
+        role=payload.role,
+        company=payload.company,
+        notes=payload.notes,
+        model=payload.model,
+    )
+    return BulletsGenerateResponse(**result)
+
+
+@router.post(
+    "/suggest-skills",
+    response_model=SuggestSkillsResponse,
+    summary="Suggest grouped skills for a role description or JD (dictionary-grounded)",
+)
+async def suggest_skills(
+    payload: SuggestSkillsRequest,
+    current_user: User = Depends(get_current_user),
+):
+    result = await suggest_skill_groups(text=payload.text, model=payload.model)
+    return SuggestSkillsResponse(**result)
+
+
+@router.post(
+    "/generate-resume-draft",
+    response_model=ResumeDraftResponse,
+    summary="Generate a complete resume document skeleton from a job title",
+)
+async def generate_resume_draft_endpoint(
+    payload: ResumeDraftRequest,
+    current_user: User = Depends(get_current_user),
+):
+    result = await generate_resume_draft(
+        title=payload.title,
+        level=payload.level,
+        skills_text=payload.skills,
+        model=payload.model,
+    )
+    return ResumeDraftResponse(**result)

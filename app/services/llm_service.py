@@ -601,3 +601,301 @@ async def generate_cover_letter(
         "model_used": result["model_used"],
         "fallback_used": False,
     }
+
+
+# ── Phase 15: generator features ───────────────────────────────────────
+# Every generator follows the product contract: LLM when available, a
+# structured deterministic fallback otherwise, and a hard no-fabrication
+# rule — generators may rephrase and organise the user's facts, never add
+# employers, metrics, or skills the user did not supply. For bullets the
+# rule is enforced in code, not just in the prompt (see _numbers_guard).
+
+import re as _re_gen
+
+
+def _numbers_in(text: str) -> set[str]:
+    return set(_re_gen.findall(r"\d+(?:[.,]\d+)?%?", text or ""))
+
+
+def _numbers_guard(items: list[str], source_text: str) -> list[str]:
+    """Drop any generated item containing a number absent from the source.
+
+    The user supplies facts; the AI supplies form. A bullet that invents
+    "40% faster" when the notes never mention 40 fails this check and is
+    dropped (the caller falls back if too few survive).
+    """
+    allowed = _numbers_in(source_text)
+    return [item for item in items if _numbers_in(item) <= allowed]
+
+
+def _fallback_summary_variants(
+    title: str, years: str, skills: list[str], target_role: str
+) -> list[dict]:
+    role = target_role or title or "developer"
+    title_bit = title or role
+    years_bit = f"{years} of experience" if years else "experience"
+    top = ", ".join(skills[:4]) if skills else "modern tooling"
+    deep = ", ".join(skills[:6]) if skills else "modern tooling"
+    return [
+        {
+            "label": "Professional",
+            "text": (
+                f"{title_bit} with {years_bit} specialising in {top}. "
+                f"Track record of owning features end to end — design, delivery, and the reliability of what ships. "
+                f"Now focused on {role} roles where that depth in {skills[0] if skills else 'the stack'} is central."
+            ),
+        },
+        {
+            "label": "Impact-led",
+            "text": (
+                f"{title_bit} ({years_bit}) who measures work by outcomes: systems that stay up, teams that ship faster, users who notice the difference. "
+                f"Core strength across {deep}, applied most recently to production systems at real scale."
+            ),
+        },
+        {
+            "label": "Concise",
+            "text": f"{title_bit} · {years_bit} · {deep}. End-to-end ownership, production-proven.",
+        },
+    ]
+
+
+async def generate_summary_variants(
+    title: str,
+    years: str,
+    skills: list[str],
+    target_role: str = "",
+    model: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """Three pick-to-insert summary variants (Phase 15)."""
+    fallback = lambda m: {  # noqa: E731
+        "variants": _fallback_summary_variants(title, years, skills, target_role),
+        "model_used": m,
+        "fallback_used": True,
+    }
+    if not _get_api_key(api_key):
+        return fallback("structured template (no LLM key)")
+
+    prompt = (
+        f"Write 3 professional-summary variants for a resume.\n"
+        f"CURRENT TITLE: {title}\nEXPERIENCE: {years}\nTOP SKILLS: {', '.join(skills[:8])}\n"
+        f"TARGET ROLE: {target_role or title}\n"
+        "Labels: Professional, Impact-led, Concise. Use ONLY the facts given — invent no employers, metrics, or skills.\n"
+        'Return ONLY JSON: {"variants": [{"label": "...", "text": "..."}, ...]} with exactly 3 items.'
+    )
+    result = await call_openrouter(
+        prompt=prompt,
+        system_prompt="You are an expert resume writer. Output only valid JSON.",
+        model=model, temperature=0.6, max_tokens=700, api_key=api_key,
+    )
+    if result["fallback_used"]:
+        return fallback(result["model_used"])
+    try:
+        raw = result["content"].strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1].removeprefix("json").strip()
+        parsed = json.loads(raw)
+        variants = [
+            {"label": str(v.get("label", "")), "text": str(v.get("text", "")).strip()}
+            for v in parsed.get("variants", [])
+            if str(v.get("text", "")).strip()
+        ]
+        if len(variants) < 3:
+            raise ValueError("too few variants")
+        return {"variants": variants[:3], "model_used": result["model_used"], "fallback_used": False}
+    except Exception:
+        return fallback(result["model_used"])
+
+
+_BULLET_PREFIX_MAP = [
+    (_re_gen.compile(r"^i was responsible for\s+", _re_gen.I), "Owned "),
+    (_re_gen.compile(r"^responsible for\s+", _re_gen.I), "Owned "),
+    (_re_gen.compile(r"^i worked on\s+", _re_gen.I), "Developed "),
+    (_re_gen.compile(r"^worked on\s+", _re_gen.I), "Developed "),
+    (_re_gen.compile(r"^i helped\s+", _re_gen.I), "Contributed to "),
+    (_re_gen.compile(r"^helped\s+", _re_gen.I), "Contributed to "),
+    (_re_gen.compile(r"^i\s+", _re_gen.I), ""),
+]
+
+
+def _fallback_bullets(notes: str) -> list[str]:
+    """Format the user's own rough notes as bullets — words kept, form added.
+
+    Splits on lines/semicolons, strips first-person filler prefixes, and
+    capitalises. Adds NO numbers, employers, or claims (see _numbers_guard —
+    by construction the output's numbers are a subset of the input's).
+    """
+    chunks = []
+    for part in _re_gen.split(r"[\n;]+", notes or ""):
+        part = part.strip(" -•\t")
+        if len(part) < 8:
+            continue
+        for pattern, replacement in _BULLET_PREFIX_MAP:
+            part = pattern.sub(replacement, part)
+        part = part[0].upper() + part[1:]
+        chunks.append(part.rstrip("."))
+    return chunks[:8]
+
+
+async def generate_bullets(
+    role: str,
+    company: str,
+    notes: str,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """Turn rough notes into achievement bullets (Phase 15).
+
+    The user supplies facts; the AI supplies form. LLM output passes the
+    numbers guard: any bullet containing a number the notes never stated is
+    dropped, and if too few survive the deterministic fallback is used.
+    """
+    fallback = lambda m: {  # noqa: E731
+        "bullets": _fallback_bullets(notes),
+        "model_used": m,
+        "fallback_used": True,
+    }
+    if not _get_api_key(api_key):
+        return fallback("structured template (no LLM key)")
+
+    prompt = (
+        f"Turn these rough notes into 3-6 strong resume bullet points for a {role} at {company}.\n"
+        "Use the Google X-Y-Z form (accomplished X, measured by Y, by doing Z) ONLY where the notes supply the facts. "
+        "NEVER invent metrics, employers, team sizes, or technologies that are not in the notes.\n\n"
+        f"NOTES:\n{notes[:2000]}\n\nReturn one bullet per line, no numbering, no leading dashes."
+    )
+    result = await call_openrouter(
+        prompt=prompt,
+        system_prompt="You are an expert resume writer who never fabricates facts.",
+        model=model, temperature=0.5, max_tokens=700, api_key=api_key,
+    )
+    if result["fallback_used"]:
+        return fallback(result["model_used"])
+    lines = [
+        ln.strip(" -•\t").strip()
+        for ln in result["content"].splitlines()
+        if len(ln.strip()) > 15
+    ]
+    guarded = _numbers_guard(lines, notes)
+    if len(guarded) < 2:
+        return fallback(result["model_used"])
+    return {"bullets": guarded[:6], "model_used": result["model_used"], "fallback_used": False}
+
+
+async def suggest_skill_groups(
+    text: str,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """Skill groups for a document, from a role description or JD (Phase 15).
+
+    Skills come from the LLM extractor when available (its own fallback is
+    the dictionary), then grouping is deterministic over the category map —
+    the roadmap's 'intersected with the dictionary' rule, so suggested
+    skills are always real dictionary skills, never free-invented strings.
+    """
+    from app.services.keyword_service import group_skills_by_category
+
+    extraction = await extract_skills_llm(text=text, model=model, api_key=api_key)
+    groups = group_skills_by_category(extraction["skills"])
+    return {
+        "groups": groups,
+        "skills": extraction["skills"],
+        "model_used": extraction["model_used"],
+        "fallback_used": extraction["fallback_used"],
+    }
+
+
+async def generate_resume_draft(
+    title: str,
+    level: str,
+    skills_text: str,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> dict:
+    """A complete document skeleton from a job title (Phase 15).
+
+    Composes the other generators: summary variants (first is used) + the
+    deterministic skill grouper over the user's stated skills. Experience
+    starts as one empty entry carrying the target role — the draft is a
+    starting structure to edit, never fabricated history.
+    """
+    from app.services.document_service import EMPTY_CONTENT
+    from app.services.keyword_service import extract_skills, group_skills_by_category
+
+    content = json.loads(json.dumps(EMPTY_CONTENT))
+    content["personal"]["title"] = title
+
+    stated = extract_skills(skills_text) or [
+        s.strip().lower() for s in skills_text.split(",") if s.strip()
+    ]
+    years = {"entry": "early-career", "mid": "3+ years", "senior": "6+ years", "lead": "10+ years"}.get(level, "")
+    summary = await generate_summary_variants(
+        title=title, years=years, skills=stated[:8], target_role=title,
+        model=model, api_key=api_key,
+    )
+    content["summary"] = summary["variants"][0]["text"] if summary["variants"] else ""
+    groups = group_skills_by_category([s for s in stated if s])
+    # Document content shape is {label, items} (Phase 13) — convert from the
+    # API grouping shape {name, skills}.
+    content["skills"] = {
+        "groups": [{"label": g["name"], "items": g["skills"]} for g in groups]
+        or ([{"label": "Core Skills", "items": stated}] if stated else [])
+    }
+    content["experience"] = [
+        {"role": title, "company": "", "location": "", "start": "", "end": "", "current": False, "bullets": []}
+    ]
+    return {
+        "content": content,
+        "summary_variants": summary["variants"],
+        "model_used": summary["model_used"],
+        "fallback_used": summary["fallback_used"],
+    }
+
+
+async def extract_resume_structure(
+    text: str,
+    model: str | None = None,
+    api_key: str | None = None,
+) -> dict | None:
+    """LLM structured extraction of resume text into builder content (Phase 15).
+
+    Returns a content dict coerced onto EMPTY_CONTENT's shape, or None when
+    no LLM is available or the output doesn't validate — the caller then
+    uses the deterministic heuristic parser (§13.4's upgrade path).
+    """
+    if not _get_api_key(api_key):
+        return None
+    from app.services.document_service import EMPTY_CONTENT
+
+    shape = json.dumps(EMPTY_CONTENT)
+    prompt = (
+        "Extract this resume into EXACTLY this JSON shape (same keys; empty strings/lists where unknown). "
+        "Copy facts verbatim — do not summarise bullets, invent dates, or add skills not present.\n"
+        f"SHAPE:\n{shape}\n\nRESUME:\n{text[:6000]}\n\nReturn ONLY the JSON object."
+    )
+    result = await call_openrouter(
+        prompt=prompt,
+        system_prompt="You are a precise resume parser. Output only valid JSON.",
+        model=model, temperature=0.1, max_tokens=2500, api_key=api_key,
+    )
+    if result["fallback_used"]:
+        return None
+    try:
+        raw = result["content"].strip()
+        if raw.startswith("```"):
+            raw = raw.split("```")[1].removeprefix("json").strip()
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict):
+            return None
+        content = json.loads(json.dumps(EMPTY_CONTENT))
+        for key in content:
+            if key in parsed and isinstance(parsed[key], type(content[key])):
+                content[key] = parsed[key]
+        # Require at least a name or one experience entry to count as success.
+        personal = content.get("personal") or {}
+        if not personal.get("full_name") and not content.get("experience"):
+            return None
+        return content
+    except Exception:
+        return None

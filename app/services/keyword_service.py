@@ -273,3 +273,55 @@ def _compute_keyword_density(
     # Ratio of resume mentions to job mentions, capped at 100
     ratio = resume_mentions / job_mentions
     return min(100.0, ratio * 100)
+
+
+# ── Skill grouping (Phase 15) ──────────────────────────────────────────
+# A small static category map over the tech dictionary. Grouping is
+# deterministic on purpose: the skills suggester and the tailor UI group the
+# *same* dictionary skills, so the grouping must never depend on an LLM's
+# mood. Anything unmapped lands in "Other".
+
+SKILL_CATEGORIES: dict[str, str] = {}
+
+
+def _fill(category: str, skills: str) -> None:
+    for skill in skills.split(","):
+        SKILL_CATEGORIES[skill.strip()] = category
+
+
+_fill("Languages", "python, javascript, typescript, java, go, golang, c, c++, c#, rust, ruby, php, swift, kotlin, scala, sql, bash, shell, powershell, perl, lua, haskell, clojure, elixir, dart, matlab, r, assembly, objective-c")
+_fill("Frameworks & Libraries", "fastapi, django, flask, react, next.js, vue, nuxt.js, angular, svelte, node.js, express, nest.js, spring, spring boot, rails, ruby on rails, laravel, asp.net, .net, jquery, bootstrap, tailwind, material ui, chakra ui, sqlalchemy, pydantic, alembic, celery")
+_fill("Databases & Storage", "postgresql, postgres, mysql, mariadb, mongodb, redis, sqlite, mssql, sql server, oracle, cassandra, couchdb, dynamodb, neo4j, elasticsearch, supabase, firebase, s3, pgvector, pinecone, chromadb, milvus, weaviate")
+_fill("Cloud & DevOps", "aws, azure, gcp, google cloud, docker, kubernetes, k8s, terraform, ansible, jenkins, ci/cd, github actions, gitlab ci, circleci, travis ci, nginx, apache, heroku, vercel, netlify, cloudflare, ec2, ecs, eks, aks, gke, lambda, fargate, cloud run, cloud functions, serverless, rds, sqs, pub/sub, rabbitmq, kafka, message queue")
+_fill("Data & AI", "machine learning, deep learning, nlp, natural language processing, llm, gpt, bert, transformers, pytorch, tensorflow, keras, scikit-learn, pandas, numpy, spark, hadoop, airflow, dbt, etl, data pipeline, data engineering, data science, bigquery, snowflake, redshift, databricks, flink, computer vision, embeddings, vector search, semantic search, rag, mlflow, recommendation system")
+_fill("Practices & Tools", "git, github, gitlab, bitbucket, jira, confluence, slack, postman, insomnia, swagger, openapi, graphql, grpc, rest api, websocket, jwt, oauth, saml, agile, scrum, kanban, tdd, bdd, unit testing, integration testing, e2e testing, pytest, jest, mocha, cypress, selenium, playwright, system design, architecture, microservices, event-driven, monolith, code review, documentation, mentoring, leadership, communication, collaboration, teamwork, problem solving, critical thinking, presentation, project management")
+
+CATEGORY_ORDER = [
+    "Languages",
+    "Frameworks & Libraries",
+    "Databases & Storage",
+    "Cloud & DevOps",
+    "Data & AI",
+    "Practices & Tools",
+    "Other",
+]
+
+
+def group_skills_by_category(skills: list[str]) -> list[dict]:
+    """Group dictionary skills into named categories, in display order.
+
+    Returns [{"name": str, "skills": [str, ...]}, ...] with empty groups
+    omitted and skills sorted within each group.
+    """
+    buckets: dict[str, list[str]] = {}
+    for skill in skills:
+        buckets.setdefault(SKILL_CATEGORIES.get(skill, "Other"), []).append(skill)
+    return [
+        {"name": name, "skills": sorted(buckets[name])}
+        for name in CATEGORY_ORDER
+        if buckets.get(name)
+    ]
+
+
+def category_for_skill(skill: str) -> str:
+    return SKILL_CATEGORIES.get(skill, "Other")

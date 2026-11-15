@@ -5,7 +5,8 @@
 // or duplicate an existing document.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, FilePlus2, Loader2, PenLine, Trash2, Upload } from "lucide-react";
+import { Copy, FilePlus2, Loader2,
+  Sparkles, PenLine, Trash2, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -13,6 +14,8 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -33,6 +36,9 @@ export default function BuilderListPage() {
   const queryClient = useQueryClient();
   const [template, setTemplate] = useState("classic");
   const [importResumeId, setImportResumeId] = useState<string>("");
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftLevel, setDraftLevel] = useState("mid");
+  const [draftSkills, setDraftSkills] = useState("");
 
   const documents = useQuery({ queryKey: ["documents"], queryFn: api.listDocuments });
   const resumes = useQuery({ queryKey: ["resumes"], queryFn: api.listResumes });
@@ -50,6 +56,24 @@ export default function BuilderListPage() {
       }),
     onSuccess: (doc) => router.push(`/app/builder/${doc.id}`),
     onError: () => toast.error("Could not create the document."),
+  });
+
+  const draftMutation = useMutation({
+    mutationFn: () =>
+      api.generateResumeDraft({ title: draftTitle, level: draftLevel, skills: draftSkills }).then(
+        (draft) =>
+          api.createDocument({
+            title: `${draftTitle} — resume draft`,
+            template_id: "classic",
+            theme: { accent: "#1d4ed8", font: "sans", density: "normal" },
+            content: draft.content,
+          }),
+      ),
+    onSuccess: (doc) => {
+      toast.success("Draft created — fill in your details and experience.");
+      router.push(`/app/builder/${doc.id}`);
+    },
+    onError: () => toast.error("Draft generation failed."),
   });
 
   const importDoc = useMutation({
@@ -146,6 +170,43 @@ export default function BuilderListPage() {
       </Card>
 
       {documents.isLoading && <Skeleton className="h-32" />}
+      <Card>
+        <CardContent className="space-y-3 pt-6">
+          <p className="flex items-center gap-2 text-sm font-medium">
+            <Sparkles className="h-4 w-4 text-blue-700" /> Start from a job title — AI draft
+          </p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">Target role</Label>
+              <Input value={draftTitle} onChange={(e) => setDraftTitle(e.target.value)} placeholder="Senior Backend Developer" className="w-60" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Level</Label>
+              <Select value={draftLevel} onValueChange={(v) => setDraftLevel(v ?? "mid")}>
+                <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="entry">Entry</SelectItem>
+                  <SelectItem value="mid">Mid-level</SelectItem>
+                  <SelectItem value="senior">Senior</SelectItem>
+                  <SelectItem value="lead">Lead</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="min-w-56 flex-1 space-y-1.5">
+              <Label className="text-xs">Your skills (comma separated)</Label>
+              <Input value={draftSkills} onChange={(e) => setDraftSkills(e.target.value)} placeholder="python, fastapi, postgresql, docker" />
+            </div>
+            <Button className="bg-blue-700 hover:bg-blue-800" onClick={() => draftMutation.mutate()} disabled={draftTitle.trim().length < 2 || draftMutation.isPending}>
+              {draftMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+              Generate draft
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            A structured starting point — summary and grouped skills filled in, experience left as a skeleton for your real history. Nothing is invented.
+          </p>
+        </CardContent>
+      </Card>
+
       {documents.data?.length === 0 && (
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">

@@ -288,6 +288,40 @@ export interface CoverLetterListItem {
 
 export const LETTER_TONES = ["professional", "enthusiastic", "concise"] as const;
 
+// ── Phase 15 generators + tailoring (mirror app/schemas/generator.py) ──
+
+export interface SummaryVariant {
+  label: string;
+  text: string;
+}
+
+export interface SkillGroupOut {
+  name: string;
+  skills: string[];
+}
+
+export interface TailorSuggestion {
+  id: string;
+  type: "add_skill" | "rewrite_bullet" | "summary" | string;
+  skill?: string | null;
+  group?: string | null;
+  experience_index?: number | null;
+  bullet_index?: number | null;
+  original: string;
+  proposed: string;
+}
+
+export interface TailorResult {
+  overall_score: number;
+  similarity_score: number;
+  keyword_score: number;
+  matched_keywords: string[];
+  missing_keywords: string[];
+  suggestions: TailorSuggestion[];
+  model_used: string;
+  fallback_used: boolean;
+}
+
 /** The backend's standard error envelope (app/main.py exception handlers). */
 export interface ApiErrorBody {
   error: boolean;
