@@ -376,44 +376,141 @@ async def extract_skills_llm(
     }
 
 
+def _prompt_field(prompt: str, label: str) -> str:
+    """Pull a labelled field out of one of this module's own prompts."""
+    import re as _re
+
+    m = _re.search(rf"{_re.escape(label)}:\s*(.+)", prompt)
+    return m.group(1).strip() if m else ""
+
+
+def _rephrase_own_bullet(bullet: str) -> str:
+    """Form-only rephrase of the user's own bullet (shared with Phase 15)."""
+    text = (bullet or "").strip().strip('"').rstrip(".")
+    if not text:
+        return text
+    for pattern, replacement in _BULLET_PREFIX_MAP:
+        text = pattern.sub(replacement, text)
+    return text[0].upper() + text[1:]
+
+
 def _generate_local_fallback(prompt: str) -> str:
-    """Generate high-quality, domain-specific fallback feedback when OpenRouter API is unavailable."""
+    """Offline fallback (rewritten 2026-11-15 — Sumit's option B).
+
+    The previous version returned canned text with invented metrics
+    ("42% latency reduction", "99.98% uptime") regardless of the user's
+    actual resume. This version is built ONLY from facts inside the prompt
+    itself — the user's own bullet, their real scores, their real matched
+    and missing skills — and wherever a metric would strengthen the text it
+    emits an explicit "[add your metric]" placeholder for the user to fill
+    with a true number. It never states a number the prompt didn't.
+    """
     prompt_lower = prompt.lower()
 
+    # ── Bullet rewrite ──
     if "rewrite this bullet point" in prompt_lower or "original bullet point" in prompt_lower:
+        import re as _re
+
+        m = _re.search(r'ORIGINAL BULLET POINT:\s*\n"([^"]+)"', prompt)
+        bullet = m.group(1) if m else ""
+        skills_line = _prompt_field(prompt, "TARGET SKILLS TO INTEGRATE IF POSSIBLE")
+        rephrased = _rephrase_own_bullet(bullet) or "Your bullet, rephrased"
+        skills_bit = (
+            f" If you genuinely used {skills_line} here, name it — otherwise leave it out."
+            if skills_line and "general" not in skills_line.lower()
+            else ""
+        )
         return (
             "### Recommended Rewrites\n\n"
-            "**Variation 1 — Strong & Quantified (Google X-Y-Z Formula):**\n"
-            "• Spearheaded the re-architecture of core backend microservices utilizing FastAPI and PostgreSQL, "
-            "reducing API latency by 42% and scaling request throughput to 15,000 requests/minute.\n\n"
-            "**Variation 2 — Keyword & Performance Optimized:**\n"
-            "• Designed and implemented distributed caching and background job pipelines with Redis and Celery, "
-            "improving data synchronization speeds by 65% and achieving 99.98% service uptime.\n\n"
-            "**Why this is stronger:** The rewrites transform a passive task description into an active achievement "
-            "with tangible business impact and clear metrics."
+            "**Variation 1 — Your facts, X-Y-Z form:**\n"
+            f"• {rephrased}, measured by [add your metric — e.g. requests/day, latency, users, or cost saved].\n\n"
+            "**Variation 2 — Your facts, tool-forward:**\n"
+            f"• {rephrased} — [add your metric], using [add the tools you actually used].\n\n"
+            "**Why this is stronger:** Same facts, stronger form: an action verb up front and a real "
+            f"number where the placeholder sits.{skills_bit} Never copy a metric you can't back up in an interview."
         )
 
-    # General Match Feedback fallback
+    # ── Match feedback ──
+    if "overall match score" in prompt_lower or "missing skills" in prompt_lower:
+        from app.services.keyword_service import extract_skills
+
+        score = _prompt_field(prompt, "OVERALL MATCH SCORE")
+        gaps_line = _prompt_field(prompt, "MISSING SKILLS / KEYWORD GAPS")
+        gaps = [g.strip() for g in gaps_line.split(",") if g.strip() and g.strip().lower() != "none detected"]
+        resume_snippet = prompt.split("JOB DESCRIPTION:")[0]
+        job_snippet = prompt.split("JOB DESCRIPTION:")[-1]
+        matched = [s for s in extract_skills(job_snippet) if s in extract_skills(resume_snippet)]
+
+        strengths = (
+            f"• **Verified overlap**: Your resume already evidences {', '.join(matched[:6])} — "
+            "skills this job explicitly asks for. Keep them prominent and worded the way the job words them."
+            if matched
+            else "• **Starting point**: The matcher found little direct skill overlap with this job's stated requirements — the gaps section below is where the leverage is."
+        )
+        score_line = f"• **Overall match: {score}** — that number comes from your actual resume against this actual job, not a template." if score else ""
+
+        if gaps:
+            gap_text = "\n".join(
+                f"• **{gap}**: named in the job, absent from your resume. If you have genuinely used it, "
+                "say so explicitly in your skills section and in a bullet. If you haven't, leave it out — "
+                "a visible gap is cheaper than a claim you can't defend in an interview."
+                for gap in gaps[:5]
+            )
+        else:
+            gap_text = "• No dictionary-level skill gaps were detected for this job. The remaining gains are in wording and evidence, not coverage."
+
+        own_bullets = [
+            ln.strip(" -•\t")
+            for ln in resume_snippet.splitlines()
+            if ln.strip().startswith(("-", "•")) and len(ln.strip()) > 25
+        ][:2]
+        if own_bullets:
+            def _after(b: str) -> str:
+                # A bullet that already carries its own metric doesn't need
+                # a placeholder appended — just the stronger form.
+                if any(ch.isdigit() for ch in b):
+                    return _rephrase_own_bullet(b)
+                return f"{_rephrase_own_bullet(b)}, measured by [add your metric — the true number only you know]."
+
+            rewrite_text = "\n".join(
+                f"• **Before:** \"{b}\"\n  **After:** \"{_after(b)}\""
+                for b in own_bullets
+            )
+        else:
+            rewrite_text = (
+                "• Take your strongest bullet and give it the X-Y-Z shape: what you accomplished, "
+                "measured by [add your metric], by doing [the method, in your own words]. "
+                "Offline mode can't see a full bullet list here, so this one is a template, not a rewrite."
+            )
+
+        parts = [
+            "### 1. Strengths & Alignments",
+            strengths,
+        ]
+        if score_line:
+            parts.append(score_line)
+        parts += [
+            "",
+            "### 2. Critical Skill Gaps & How to Address Them",
+            gap_text,
+            "",
+            "### 3. Actionable Bullet-Point Rewrites (Google X-Y-Z Formula)",
+            rewrite_text,
+            "",
+            "### 4. Summary & ATS Strategy",
+            "• Mirror the job's own wording for the skills you truly have — ATS matching is literal.",
+            "• Put numbers only where they're true; a placeholder you fill honestly beats a borrowed metric.",
+            "• Keep standard section headings (Summary, Experience, Skills, Education) so parsers file your content correctly.",
+            "",
+            "_Offline mode: this feedback is generated locally from your match data — no AI model was involved._",
+        ]
+        return "\n".join(parts)
+
+    # ── Anything else (streaming, ad-hoc prompts) ──
     return (
-        "### 1. Strengths & Alignments\n"
-        "• **Core Technical Synergy**: The candidate exhibits strong alignment in core backend fundamentals, "
-        "including Python, RESTful API architecture, and relational database management.\n"
-        "• **Production Experience**: Demonstrated track record designing scalable microservices and implementing "
-        "automated test pipelines with pytest.\n\n"
-        "### 2. Critical Skill Gaps & How to Address Them\n"
-        "• **Distributed Systems & Caching**: The job description emphasizes Redis caching, asynchronous processing, and message queues. "
-        "Ensure these competencies are explicitly stated in your skills section and illustrated in project bullet points.\n"
-        "• **Cloud & Container Orchestration**: Highlight practical experience with Docker, Kubernetes, and CI/CD deployment pipelines.\n\n"
-        "### 3. Actionable Bullet-Point Rewrites (Google X-Y-Z Formula)\n"
-        "• **Before:** \"Managed database and wrote APIs for web application.\"\n"
-        "  **After:** \"Architected high-throughput RESTful APIs with FastAPI and PostgreSQL, optimizing database queries to reduce p99 response times from 350ms to 45ms.\"\n"
-        "• **Before:** \"Used Redis for caching and background tasks.\"\n"
-        "  **After:** \"Implemented Redis-based caching and Celery task queues, eliminating duplicate database computations and increasing concurrent user capacity by 3x.\"\n"
-        "• **Before:** \"Deployed applications using Docker.\"\n"
-        "  **After:** \"Containerized 5+ microservices with Docker and orchestrated deployments using Kubernetes, cutting deployment rollback times by 80%.\"\n\n"
-        "### 4. Summary & ATS Strategy\n"
-        "• Add a dedicated **'Core Technical Competencies'** section near the top of the resume featuring all target keywords.\n"
-        "• Integrate missing keywords directly inside job achievement statements rather than listing them in isolation to maximize ATS contextual relevance."
+        "AI generation is unavailable offline, so here is the honest template instead: "
+        "state what you accomplished, measured by [add your metric], by doing [your method, in your own words]. "
+        "Fill the brackets with your real numbers — never borrow metrics you can't back up."
     )
 
 
@@ -707,7 +804,26 @@ async def generate_summary_variants(
         return fallback(result["model_used"])
 
 
+_PAST_TENSE = {
+    "building": "Built", "developing": "Developed", "creating": "Created",
+    "writing": "Wrote", "designing": "Designed", "implementing": "Implemented",
+    "maintaining": "Maintained", "leading": "Led", "managing": "Managed",
+}
+
+
+def _PAST_TENSE_VERBS(m):  # noqa: N802 - used as a re.sub callable in the map below
+    return _PAST_TENSE.get(m.group(1).lower(), m.group(1).capitalize())
+
+
+def _PAST_TENSE_VERBS_G2(m):  # noqa: N802
+    return _PAST_TENSE.get(m.group(2).lower(), m.group(2).capitalize())
+
+
 _BULLET_PREFIX_MAP = [
+    # Verb-preserving first: "Responsible for building X" -> "Built X",
+    # not "Owned building X".
+    (_re_gen.compile(r"^responsible for\s+(building|developing|creating|writing|designing|implementing|maintaining|leading|managing)\b", _re_gen.I), _PAST_TENSE_VERBS),
+    (_re_gen.compile(r"^(was|am|is)\s+responsible for\s+(building|developing|creating|writing|designing|implementing|maintaining|leading|managing)\b", _re_gen.I), _PAST_TENSE_VERBS_G2),
     (_re_gen.compile(r"^i was responsible for\s+", _re_gen.I), "Owned "),
     (_re_gen.compile(r"^responsible for\s+", _re_gen.I), "Owned "),
     (_re_gen.compile(r"^i worked on\s+", _re_gen.I), "Developed "),
