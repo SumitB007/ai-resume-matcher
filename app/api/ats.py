@@ -7,11 +7,13 @@ Two surfaces, one engine (app/services/ats_service.py):
   never touch the database (decisions.md §12.3).
 """
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
+from app.config import settings
+from app.core.rate_limiter import check_ip_rate_limit
 from app.database import get_db
 from app.models.ats_check import AtsCheckResult
 from app.models.resume import Resume
@@ -116,7 +118,15 @@ async def get_resume_ats_check(
     response_model=AtsCheckResponse,
     summary="Anonymous ATS check — upload a resume, nothing is stored",
 )
-async def anonymous_ats_check(file: UploadFile = File(..., description="Resume file (PDF or DOCX)")):
+async def anonymous_ats_check(request: Request, file: UploadFile = File(..., description="Resume file (PDF or DOCX)")):
+    # Phase 8: the Phase 2 known gap — this endpoint does real parsing work
+    # for unauthenticated strangers. Per-IP minute + daily limits.
+    await check_ip_rate_limit(
+        request,
+        "anon-ats-check",
+        settings.anon_check_rate_limit_per_minute,
+        daily_cap=settings.anon_check_daily_cap,
+    )
     """Public free checker: parse + check in-memory, persist NOTHING.
 
     Validation mirrors the authenticated upload (type, size, minimum text) so

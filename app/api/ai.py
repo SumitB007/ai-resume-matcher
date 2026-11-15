@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 
 from app.config import settings
 from app.core.dependencies import get_current_user
+from app.core.rate_limiter import check_daily_ai_cap
 from app.models.user import User
 from app.schemas.llm import (
     BulletRewriteRequest,
@@ -101,6 +102,7 @@ async def rewrite_bullet(
 
     utilizing the Google X-Y-Z formula and seamlessly integrating target technologies.
     """
+    await check_daily_ai_cap(current_user.id)
     result = await rewrite_bullet_point(
         bullet_point=payload.bullet,
         job_context=payload.target_job,
@@ -125,6 +127,7 @@ async def extract_skills(
     current_user: User = Depends(get_current_user),
 ):
     """Context-aware technical skill extraction using LLM natural language understanding."""
+    await check_daily_ai_cap(current_user.id)
     result = await extract_skills_llm(
         text=payload.text,
         model=payload.model,
@@ -147,6 +150,7 @@ async def stream_ai_generation(
     current_user: User = Depends(get_current_user),
 ):
     """Stream response tokens in real-time using Server-Sent Events (SSE)."""
+    await check_daily_ai_cap(current_user.id)
     async def event_generator():
         async for token in stream_openrouter(prompt=prompt, model=model):
             # Send standard SSE format
@@ -168,6 +172,7 @@ async def cover_letter(
 ):
     """Stateless generation (roadmap §8). To get a saved, editable letter in
     one step, use POST /cover-letters/generate instead."""
+    await check_daily_ai_cap(current_user.id)
     result = await generate_cover_letter(
         resume_text=payload.resume_text,
         job_text=payload.job_text,
@@ -192,6 +197,7 @@ async def generate_summary(
     payload: SummaryGenerateRequest,
     current_user: User = Depends(get_current_user),
 ):
+    await check_daily_ai_cap(current_user.id)
     result = await generate_summary_variants(
         title=payload.title,
         years=payload.years_experience,
@@ -211,6 +217,7 @@ async def generate_bullets_endpoint(
     payload: BulletsGenerateRequest,
     current_user: User = Depends(get_current_user),
 ):
+    await check_daily_ai_cap(current_user.id)
     result = await generate_bullets(
         role=payload.role,
         company=payload.company,
@@ -229,6 +236,7 @@ async def suggest_skills(
     payload: SuggestSkillsRequest,
     current_user: User = Depends(get_current_user),
 ):
+    await check_daily_ai_cap(current_user.id)
     result = await suggest_skill_groups(text=payload.text, model=payload.model)
     return SuggestSkillsResponse(**result)
 
@@ -242,6 +250,7 @@ async def generate_resume_draft_endpoint(
     payload: ResumeDraftRequest,
     current_user: User = Depends(get_current_user),
 ):
+    await check_daily_ai_cap(current_user.id)
     result = await generate_resume_draft(
         title=payload.title,
         level=payload.level,

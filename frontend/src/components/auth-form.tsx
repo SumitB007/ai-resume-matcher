@@ -28,6 +28,7 @@ import { ApiError, api } from "@/lib/api/client";
 const passwordRule = z.string().min(8, "Password must be at least 8 characters").max(128, "Password must be at most 128 characters");
 
 const schema = z.object({
+  name: z.string().max(120, "Name must be at most 120 characters").optional(),
   email: z.email("Enter a valid email address"),
   password: passwordRule,
 });
@@ -51,7 +52,7 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
     setServerError(null);
     try {
       if (!isLogin) {
-        await api.register(values.email, values.password);
+        await api.register(values.email, values.password, values.name?.trim() || undefined);
       }
       await api.login(values.email, values.password);
       toast.success(isLogin ? "Welcome back" : "Account created — welcome");
@@ -83,6 +84,21 @@ export function AuthForm({ mode }: { mode: "login" | "signup" }) {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+            {!isLogin && (
+              <div className="space-y-2">
+                <Label htmlFor="name">Name <span className="text-muted-foreground">(optional)</span></Label>
+                <Input
+                  id="name"
+                  type="text"
+                  autoComplete="name"
+                  placeholder="Jane Developer"
+                  {...register("name")}
+                />
+                {errors.name && (
+                  <p className="text-sm text-destructive">{errors.name.message}</p>
+                )}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

@@ -14,6 +14,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user
+from app.core.rate_limiter import check_daily_ai_cap
 from app.database import get_db
 from app.models.cover_letter import CoverLetter
 from app.models.job import JobDescription
@@ -94,6 +95,7 @@ async def generate_letter(
     content is flattened — a letter should reflect the document as it is now,
     not a stale sync). Job source: a saved job, or pasted text.
     """
+    await check_daily_ai_cap(current_user.id)
     # ── Resolve the resume ──
     resume_text = ""
     sender: dict = {}
