@@ -489,3 +489,23 @@ This document details every major architectural, technical, library, and impleme
 ### 17.4 SEO plumbing: sitemap, robots, metadata, JSON-LD
 **Decision:** `sitemap.ts` (all public routes incl. every template/example), `robots.ts` (app/api/print/auth disallowed), `metadataBase` from `NEXT_PUBLIC_SITE_URL`, WebApplication JSON-LD sitewide, FAQ JSON-LD on examples, per-page OpenGraph via `generateMetadata`.
 **Why:** The public pages existed since Phase 1 but nothing told crawlers they exist or kept them out of the app surface. OG images per page are deferred to Phase 8 polish — metadata ships now, artwork later. Blog stays out of scope per §11.
+
+## Phase 18 — Hardening & launch readiness (roadmap Phase 8)
+
+### 18.1 CORS: named origins, env-driven
+`allow_origins=["*"]` (with its own "restrict in production" comment) is now `CORS_ORIGINS` — comma-separated, defaulting to the two local dev origins. A credentialed API that answers any origin is an open door; production sets exactly the frontend's origin. Verified live: an allowed origin is echoed, a foreign origin receives no `Access-Control-Allow-Origin` at all.
+
+### 18.2 Rate limits grow up: per-IP for strangers, daily caps for cost
+The Phase 2 known gap closes: the anonymous checker is limited per IP (5/min, 100/day) — it does real parsing work for unauthenticated strangers. Auth endpoints get 10/min per IP (credential-stuffing friction). AI generation gets a per-user DAILY cap (100/day, env-tunable) because LLM spend is the variable cost: a per-minute limit stops bursts, a daily cap stops slow-drip abuse. All of it reuses the existing Redis limiter (same fail-open policy: Redis down must not take the API down) via a generic key-based helper; client IP reads the first X-Forwarded-For hop, which is also how the limits were flood-tested.
+
+### 18.3 Account deletion is total, in one transaction
+`DELETE /auth/me` deletes matches, ATS results, cover letters, documents, resumes, jobs, then the user — children before parents, one commit. Resumes are PII: a "deleted" account that leaves extracted resume text behind would make the privacy policy a lie, and the policy page (§18.5) promises exactly this behaviour. Verified live: 204, login 401s after, zero orphaned rows.
+
+### 18.4 The name field (G7) — minimal on purpose
+`users.name` (nullable) + register/PATCH /auth/me + signup field + Settings page. Email stays the identity; the name is a display nicety. Password reset and email verification are deliberately NOT in this phase: the backend has no mail sending at all, and bolting on a provider is an owner decision (recorded in DEPLOYMENT.md as an open decision with the follow-up scoped).
+
+### 18.5 The privacy policy is written from the code
+`/privacy` describes observed behaviour only: what is stored (extracted text, not original files), the anonymous checker's non-persistence (§12.3), OpenRouter processing disclosed when a model is configured, offline fallbacks when it isn't, the single auth cookie, and the total-deletion promise of §18.3. A log-hygiene scan backs the "no resume text in logs" claim: no logger/print call in the backend touches raw resume text or prompts.
+
+### 18.6 Docker returns — as maintenance, not invention
+The Phase 1 compose stack was audited rather than rewritten: it needed the Phase 8 env vars, the frontend's dead `NEXT_PUBLIC_API_BASE_URL` build arg replaced by `NEXT_PUBLIC_SITE_URL`, and a frontend `.env.example`. DEPLOYMENT.md records the topology, the production env checklist, the pgvector hard constraint, and the three owner decisions (host, mail provider, error tracking). Honest limit: this environment has no Docker daemon, so the stack is YAML-validated and file-audited here, not boot-tested — the go-live checklist in DEPLOYMENT.md starts with the boot test for that reason.

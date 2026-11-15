@@ -11,6 +11,7 @@ import {
   FileText,
   History,
   TrendingUp,
+  Settings,
   Mail,
   LayoutDashboard,
   Loader2,
@@ -36,6 +37,7 @@ const navItems = [
   { href: "/app/cover-letters", label: "Cover Letters", icon: Mail, exact: false },
   { href: "/app/jobs", label: "Saved Jobs", icon: Briefcase, exact: false },
   { href: "/app/matches", label: "Match History", icon: History, exact: false },
+  { href: "/app/settings", label: "Settings", icon: Settings, exact: false },
 ];
 
 function NavLinks() {

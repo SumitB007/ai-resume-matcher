@@ -8,6 +8,7 @@ from pydantic import BaseModel, EmailStr, Field
 class UserCreate(BaseModel):
     """Schema for user registration."""
 
+    name: str | None = Field(None, max_length=120, examples=["Jane Developer"])
     email: str = Field(..., min_length=5, max_length=255, examples=["user@example.com"])
     password: str = Field(..., min_length=8, max_length=128, examples=["strongpassword123"])
 
@@ -23,6 +24,7 @@ class UserResponse(BaseModel):
     """Schema for returning user data (no password)."""
 
     id: int
+    name: str | None = None
     email: str
     created_at: datetime
 
@@ -34,3 +36,9 @@ class Token(BaseModel):
 
     access_token: str
     token_type: str = "bearer"
+
+
+class UserUpdate(BaseModel):
+    """Schema for profile updates (Phase 8 — the name field, G7)."""
+
+    name: str | None = Field(None, max_length=120)

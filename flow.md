@@ -538,3 +538,12 @@ Tailoring (read-only endpoint; client applies):
 2. **Templates**: `/templates` gallery renders all six templates live from sample documents → `/templates/[id]` adds who-it's-for + ATS notes → CTA into the builder.
 3. **Examples**: `/examples` → `/examples/[role]` shows a full sample resume in its recommended template, the skills that role is scored on, role-specific tips, and FAQ (visible + JSON-LD) → CTAs to the free ATS checker and the matcher.
 4. **Trust signals**: every sample is labelled fictional; the Sidebar template page warns about legacy ATS column parsing instead of hiding it.
+
+## Flow 17 — Hardening surfaces (Phase 18)
+
+- Browser → API CORS: only origins listed in CORS_ORIGINS receive Access-Control-Allow-Origin; everything else is a plain no.
+- Stranger → POST /ats/check-upload: per-IP minute (5) + daily (100) counters in Redis gate the parse; the 6th request in a minute is a 429 before any file work happens.
+- Attacker → POST /auth/login|register: 10 attempts/min per IP, then 429s.
+- User → any /ai generation or cover-letter generate: a per-user daily counter (AI_DAILY_CAP) increments first; past the cap the answer is 429, not a bill.
+- User → Settings → Delete account: DELETE /auth/me wipes matches → ATS results → letters → documents → resumes → jobs → user in one transaction; the session cookie is cleared client-side and the deleted login 401s forever.
+- Owner → production: DEPLOYMENT.md checklist — real SECRET_KEY (startup warns on the default), real CORS_ORIGINS, pgvector-capable Postgres with backups, NEXT_PUBLIC_SITE_URL set before the frontend build.

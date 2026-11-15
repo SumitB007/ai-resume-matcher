@@ -57,6 +57,12 @@ services:
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/2
       SECRET_KEY: ${SECRET_KEY:-change-this-in-production}
+      # Phase 8: CORS names the real frontend origin(s); AI cost cap.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      AI_DAILY_CAP: ${AI_DAILY_CAP:-100}
+      AUTH_RATE_LIMIT_PER_MINUTE: ${AUTH_RATE_LIMIT_PER_MINUTE:-10}
+      ANON_CHECK_RATE_LIMIT_PER_MINUTE: ${ANON_CHECK_RATE_LIMIT_PER_MINUTE:-5}
+      ANON_CHECK_DAILY_CAP: ${ANON_CHECK_DAILY_CAP:-100}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_DEFAULT_MODEL: ${OPENROUTER_DEFAULT_MODEL:-openai/gpt-4o-mini}
       DEBUG: ${DEBUG:-true}
@@ -87,7 +93,8 @@ services:
     build:
       context: ./frontend
       args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8000}
+        # Inlined at build time: the public site URL for canonical/OG/sitemap.
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
     environment:
       # Server-side calls (auth proxy / BFF routes) reach the API by its
       # compose service name, not localhost.

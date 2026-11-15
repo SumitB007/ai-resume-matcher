@@ -36,10 +36,17 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+if settings.secret_key == "change-this-in-production":
+    import logging as _logging
+
+    _logging.getLogger(__name__).warning(
+        "SECRET_KEY is the built-in default — set a real one in the environment before deploying."
+    )
+
 # ── CORS Middleware ──
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Restrict in production
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

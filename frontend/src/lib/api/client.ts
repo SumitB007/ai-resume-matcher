@@ -78,10 +78,10 @@ export const api = {
     const response = await fetch("/api/auth/login", jsonInit("POST", { email, password }));
     if (!response.ok) throw await parseError(response);
   },
-  async register(email: string, password: string): Promise<User> {
+  async register(email: string, password: string, name?: string): Promise<User> {
     const response = await fetch(
       "/api/auth/register",
-      jsonInit("POST", { email, password }),
+      jsonInit("POST", { email, password, ...(name ? { name } : {}) }),
     );
     if (!response.ok) throw await parseError(response);
     return (await response.json()) as User;
@@ -89,6 +89,10 @@ export const api = {
   async logout(): Promise<void> {
     await fetch("/api/auth/logout", { method: "POST" });
   },
+  updateMe: (name: string | null) =>
+    request<User>("/auth/me", jsonInit("PATCH", { name })),
+  deleteMe: () => request<void>("/auth/me", { method: "DELETE" }),
+
   async me(): Promise<User> {
     const response = await fetch("/api/auth/me");
     if (!response.ok) throw await parseError(response);
